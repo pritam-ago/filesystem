@@ -8,7 +8,8 @@ import {
   CopyObjectCommand,
   S3Client,
   ListObjectsV2CommandOutput,
-  GetObjectCommandOutput
+  GetObjectCommandOutput,
+  _Object
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
@@ -25,6 +26,8 @@ interface File {
   name: string;
   size: number;
   lastModified: Date;
+  type?: string;
+  thumbnailUrl?: string;
 }
 
 interface ListObjectsResult {
@@ -114,14 +117,45 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
 
   const files = (result.Contents || [])
     .filter(obj => obj.Key !== Prefix)
-    .map(obj => ({
-      key: obj.Key!,
-      name: obj.Key!.split("/").pop()!, 
-      size: obj.Size || 0,
-      lastModified: obj.LastModified || new Date(),
-    }));
+    .map(async (obj: _Object) => {
+      const key = obj.Key!;
+      const name = key.split("/").pop()!;
+      const mimeType = (obj as any).ContentType || '';
+      let thumbnailUrl: string | undefined;
 
-  return { folders, files };
+      // Check if this file type supports thumbnails
+      if (mimeType.startsWith('image/') || 
+          mimeType.startsWith('video/') || 
+          mimeType === 'application/pdf') {
+        const thumbnailKey = `thumbnails/${key}`;
+        try {
+          // Check if thumbnail exists
+          const thumbnailCommand = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: thumbnailKey,
+          });
+          await s3.send(thumbnailCommand);
+          
+          // Generate signed URL for thumbnail
+          thumbnailUrl = await getSignedUrl(s3, thumbnailCommand, { expiresIn: 3600 });
+        } catch (error) {
+          console.error('Failed to get thumbnail URL:', error);
+        }
+      }
+
+      return {
+        key,
+        name,
+        size: obj.Size || 0,
+        lastModified: obj.LastModified || new Date(),
+        type: mimeType,
+        thumbnailUrl,
+      };
+    });
+
+  const resolvedFiles = await Promise.all(files);
+
+  return { folders, files: resolvedFiles };
 };
 
 export const deleteObject = async (Key: string): Promise<void> => {

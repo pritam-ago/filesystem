@@ -12,6 +12,8 @@ interface FileManagerContextType {
   isLoading: boolean
   isUploading: boolean
   uploadProgress: number
+  viewMode: "list" | "grid"
+  setViewMode: (mode: "list" | "grid") => void
   fetchFiles: (prefix?: string) => Promise<void>
   createFolder: (folderPath: string, currentFolder?: string) => Promise<void>
   uploadFiles: (files: File[], folder?: string) => Promise<void>
@@ -29,6 +31,8 @@ const FileManagerContext = createContext<FileManagerContextType>({
   isLoading: false,
   isUploading: false,
   uploadProgress: 0,
+  viewMode: "list",
+  setViewMode: () => {},
   fetchFiles: async () => {},
   createFolder: async () => {},
   uploadFiles: async () => {},
@@ -45,6 +49,7 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
 
   const fetchFiles = useCallback(async (prefix?: string) => {
     setIsLoading(true)
@@ -112,6 +117,8 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
         isLoading,
         isUploading,
         uploadProgress,
+        viewMode,
+        setViewMode,
         fetchFiles,
         createFolder,
         uploadFiles,

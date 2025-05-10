@@ -9,14 +9,16 @@ export interface FileItem {
   name: string
   size: number
   lastModified: Date
-  type: string
+  type?: string
+  url?: string
+  thumbnailUrl?: string
 }
 
 export interface FolderItem {
-  key: string
   name: string
-  lastModified: Date
+  key: string
   size: number
+  lastModified: Date
 }
 
 export interface FileOperation {

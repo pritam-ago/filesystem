@@ -22,14 +22,16 @@ export function FileManagerListView({
   onNavigate,
   onContextMenu,
 }: FileManagerListViewProps) {
+  const stripUserPrefix = (path: string) => path.replace(/^users\/[^/]+\//, "");
+
   const handleItemClick = (key: string, isFolder: boolean) => {
     if (isFolder) {
-      onNavigate(key)
+      onNavigate(stripUserPrefix(key));
     }
   }
 
   const handleFolderDoubleClick = (folder: string) => {
-    onNavigate(folder)
+    onNavigate(stripUserPrefix(folder));
   }
 
   return (
