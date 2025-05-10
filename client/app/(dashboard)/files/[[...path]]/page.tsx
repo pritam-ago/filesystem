@@ -11,7 +11,7 @@ export default function FilesPage({
 }: {
   params: { path?: string[] }
 }) {
-  const path = params.path ? params.path.join("/") : ""
+  const path = params.path ? params.path.map(decodeURIComponent).join("/") : ""
 
   return <FileManager initialPath={path} />
 }

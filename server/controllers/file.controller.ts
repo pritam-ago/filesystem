@@ -64,7 +64,9 @@ export const createFolder = async (req: CreateFolderRequest, res: Response): Pro
   const userId = req.user.userId;
   const { folderPath, currentFolder } = req.body;
   
-  const folderPathFinal = currentFolder ? `${currentFolder}/${folderPath}` : `${folderPath}`;
+  // Decode the folder path to prevent double encoding
+  const decodedFolderPath = decodeURIComponent(folderPath);
+  const folderPathFinal = currentFolder ? `${currentFolder}/${decodedFolderPath}` : `${decodedFolderPath}`;
 
   if (!folderPath) {
     res.status(400).json({ message: 'Folder path required' });

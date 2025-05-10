@@ -30,7 +30,7 @@ export function FileManagerBreadcrumb({ path, onNavigate }: FileManagerBreadcrum
               className={`h-8 ${isLast ? "font-medium" : ""}`}
               onClick={() => onNavigate(segmentPath)}
             >
-              {segment}
+              {decodeURIComponent(segment)}
             </Button>
             {!isLast && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           </div>

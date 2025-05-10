@@ -43,7 +43,7 @@ export function FileManagerListView({
       </div>
       <div className="divide-y">
         {folders.map((folder) => {
-          const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.name
+          const folderPath = folder.key;
 
           return (
             <div

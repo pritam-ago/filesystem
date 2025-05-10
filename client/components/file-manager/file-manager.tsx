@@ -41,7 +41,11 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
   }, [initialPath, fetchFiles, setCurrentPath])
 
   const handleNavigate = (path: string) => {
-    router.push(`/files/${path}`)
+    const encodedPath = path
+      .split('/')
+      .map(encodeURIComponent)
+      .join('/');
+    router.push(`/files/${encodedPath}`)
   }
 
   const handleCreateFolder = async (folderName: string) => {

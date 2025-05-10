@@ -56,15 +56,15 @@ export function FileManagerGridView({
     if (file.type?.startsWith('image/')) {
       return (
         <div className="relative h-24 w-24 overflow-hidden rounded-lg">
-          <img
-            src={file.url}
-            alt={file.name}
+        <img
+          src={file.url}
+          alt={file.name}
             className="h-full w-full object-cover"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = '/placeholder-image.png';
             }}
-          />
+        />
         </div>
       )
     }
