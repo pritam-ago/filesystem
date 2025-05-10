@@ -22,6 +22,7 @@ interface File {
   key: string;
   name: string;
   size: string;
+  lastModified: Date;
 }
 
 interface ListObjectsResult {
@@ -53,7 +54,17 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
     Delimiter: '/',
   });
 
+  console.log('S3 ListObjectsV2Command params:', {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Prefix,
+    Delimiter: '/',
+  });
+
   const result = await s3.send(command);
+  console.log('Raw S3 response:', {
+    CommonPrefixes: result.CommonPrefixes,
+    Contents: result.Contents,
+  });
 
   const folders = (result.CommonPrefixes || []).map(cp => ({
     key: cp.Prefix!,
@@ -66,6 +77,7 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
       key: obj.Key!,
       name: obj.Key!.split("/").pop()!, 
       size: formatSize(obj.Size || 0),
+      lastModified: obj.LastModified || new Date(),
     }));
 
   return { folders, files };

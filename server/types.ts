@@ -9,42 +9,60 @@ export interface AuthenticatedRequest<
   ReqQuery = ParsedQs,
 > extends Request<P, ResBody, ReqBody, ReqQuery> {
   user: {
-    id: string;
+    userId: string;
   };
 }
 
-export interface UploadFilesRequest extends AuthenticatedRequest<{}, any, { folder?: string }> {
+export interface UploadFilesRequest extends AuthenticatedRequest {
   files?: Express.Multer.File[];
+  body: {
+    folder?: string;
+  };
 }
 
-export interface CreateFolderRequest extends AuthenticatedRequest<{}, any, {
-  folderPath: string;
-  currentFolder?: string;
-}> {}
+export interface CreateFolderRequest extends AuthenticatedRequest {
+  body: {
+    folderPath: string;
+    currentFolder?: string;
+  };
+}
 
-export interface ListFilesRequest extends AuthenticatedRequest<{}, any, any, {
-  prefix?: string;
-}> {}
+export interface ListFilesRequest extends AuthenticatedRequest {
+  query: {
+    prefix?: string;
+  };
+}
 
-export interface DeleteRequest extends AuthenticatedRequest<{}, any, {
-  key: string;
-  isFolder: boolean;
-}> {}
+export interface DeleteRequest extends AuthenticatedRequest {
+  body: {
+    key: string;
+    isFolder: boolean;
+  };
+}
 
-export interface SignedUrlRequest extends AuthenticatedRequest<{}, any, any, {
-  key: string;
-}> {}
+export interface SignedUrlRequest extends AuthenticatedRequest {
+  query: {
+    key: string;
+  };
+}
 
-export interface CopyMoveRequest extends AuthenticatedRequest<{}, any, {
-  sourceKey: string;
-  destinationKey: string;
-}> {}
+export interface CopyMoveRequest extends AuthenticatedRequest {
+  body: {
+    keys: string[];
+    targetFolder: string;
+  };
+}
 
-export interface RenameRequest extends AuthenticatedRequest<{}, any, {
-  oldKey: string;
-  newKey: string;
-}> {}
+export interface RenameRequest extends AuthenticatedRequest {
+  body: {
+    key: string;
+    newName: string;
+    isFolder: boolean;
+  };
+}
 
-export interface DownloadFolderRequest extends AuthenticatedRequest<{
-  folder: string;
-}> {} 
+export interface DownloadFolderRequest extends AuthenticatedRequest {
+  params: {
+    folder: string;
+  };
+} 

@@ -28,9 +28,12 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const uploadFiles = async (req: UploadFilesRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
+  const userId = req.user.userId;
   const files = req.files;
-  const folderPath = req.body.folder || '';
+  let folderPath = req.body.folder || '';
+  if (folderPath.startsWith(`users/${userId}/`)) {
+    folderPath = folderPath.slice(`users/${userId}/`.length);
+  }
 
   if (!files?.length) {
     res.status(400).json({ message: 'No files uploaded' });
@@ -58,7 +61,7 @@ export const uploadFiles = async (req: UploadFilesRequest, res: Response): Promi
 };
 
 export const createFolder = async (req: CreateFolderRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
+  const userId = req.user.userId;
   const { folderPath, currentFolder } = req.body;
   
   const folderPathFinal = currentFolder ? `${currentFolder}/${folderPath}` : `${folderPath}`;
@@ -78,7 +81,7 @@ export const createFolder = async (req: CreateFolderRequest, res: Response): Pro
 };
 
 export const listFiles = async (req: ListFilesRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
+  const userId = req.user.userId;
   let { prefix } = req.query;
 
   if (prefix && !prefix.endsWith('/')) {
@@ -86,9 +89,12 @@ export const listFiles = async (req: ListFilesRequest, res: Response): Promise<v
   }
   
   const Prefix = `users/${userId}/${prefix || ''}`;
+  console.log('Listing files with prefix:', Prefix);
 
   try {
     const { folders, files } = await listObjects(Prefix);
+    console.log('S3 Response - Folders:', folders);
+    console.log('S3 Response - Files:', files);
     res.status(200).json({ folders, files });
   } catch (err) {
     console.error("S3 List Error:", err);
@@ -97,7 +103,7 @@ export const listFiles = async (req: ListFilesRequest, res: Response): Promise<v
 };
 
 export const deleteFileOrFolder = async (req: DeleteRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
+  const userId = req.user.userId;
   const { key, isFolder } = req.body;
 
   if (!key) {
@@ -120,7 +126,7 @@ export const deleteFileOrFolder = async (req: DeleteRequest, res: Response): Pro
 };
 
 export const getSignedUrl = async (req: SignedUrlRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
+  const userId = req.user.userId;
   const { key } = req.query;
 
   if (!key) {
@@ -128,85 +134,88 @@ export const getSignedUrl = async (req: SignedUrlRequest, res: Response): Promis
     return;
   }
 
-  const fullKey = `users/${userId}/${key.replace(/^\/+/, '')}`;
   try {
-    const url = await generateSignedUrl(fullKey);
-    res.status(200).json({ url });
+    const url = await generateSignedUrl(`users/${userId}/${key}`);
+    res.json({ url });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
 
 export const copyFile = async (req: CopyMoveRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
-  const { sourceKey, destinationKey } = req.body;
+  const userId = req.user.userId;
+  const { keys, targetFolder } = req.body;
 
-  if (!sourceKey || !destinationKey) {
-    res.status(400).json({ message: 'Source and destination keys are required' });
+  if (!keys?.length || !targetFolder) {
+    res.status(400).json({ message: 'Keys and target folder are required' });
     return;
   }
 
-  const sourceFullKey = `users/${userId}/${sourceKey.replace(/^\/+/, '')}`;
-  const destinationFullKey = `users/${userId}/${destinationKey.replace(/^\/+/, '')}`;
-
   try {
-    await copyObject(sourceFullKey, destinationFullKey);
-    res.status(200).json({ message: 'File copied successfully' });
+    const copiedFiles = [];
+    for (const key of keys) {
+      const sourceKey = `users/${userId}/${key}`;
+      const destinationKey = `users/${userId}/${targetFolder}/${key.split('/').pop()}`;
+      await copyObject(sourceKey, destinationKey);
+      copiedFiles.push({
+        key: destinationKey,
+        name: key.split('/').pop(),
+      });
+    }
+    res.json({ message: 'Files copied', copiedFiles });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
 
 export const moveFile = async (req: CopyMoveRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
-  const { sourceKey, destinationKey } = req.body;
+  const userId = req.user.userId;
+  const { keys, targetFolder } = req.body;
 
-  if (!sourceKey || !destinationKey) {
-    res.status(400).json({ message: 'Source and destination keys are required' });
+  if (!keys?.length || !targetFolder) {
+    res.status(400).json({ message: 'Keys and target folder are required' });
     return;
   }
 
-  const sourceFullKey = `users/${userId}/${sourceKey.replace(/^\/+/, '')}`;
-  const destinationFullKey = `users/${userId}/${destinationKey.replace(/^\/+/, '')}`;
-
   try {
-    await moveObject(sourceFullKey, destinationFullKey);
-    res.status(200).json({ message: 'File moved successfully' });
+    for (const key of keys) {
+      const sourceKey = `users/${userId}/${key}`;
+      const destinationKey = `users/${userId}/${targetFolder}/${key.split('/').pop()}`;
+      await moveObject(sourceKey, destinationKey);
+    }
+    res.json({ message: 'Files moved' });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
 
 export const renameFileOrFolder = async (req: RenameRequest, res: Response): Promise<void> => {
-  const userId = req.user.id;
-  const { oldKey, newKey } = req.body;
+  const userId = req.user.userId;
+  const { key, newName, isFolder } = req.body;
 
-  if (!oldKey || !newKey) {
-    res.status(400).json({ message: 'Old and new keys are required' });
+  if (!key || !newName) {
+    res.status(400).json({ message: 'Key and new name are required' });
     return;
   }
 
-  const oldFullKey = `users/${userId}/${oldKey.replace(/^\/+/, '')}`;
-  const newFullKey = `users/${userId}/${newKey.replace(/^\/+/, '')}`;
-
   try {
-    await moveObject(oldFullKey, newFullKey);
-    res.status(200).json({ message: 'File or folder renamed successfully' });
+    const sourceKey = `users/${userId}/${key}`;
+    const destinationKey = `users/${userId}/${key.split('/').slice(0, -1).join('/')}/${newName}${isFolder ? '/' : ''}`;
+    await moveObject(sourceKey, destinationKey);
+    res.json({ message: 'Item renamed' });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
 
 export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Response): Promise<void> => {
+  const userId = req.user.userId;
   const { folder } = req.params;
-  const userId = req.user.id;
-
-  const folderKey = `users/${userId}/${folder}/`;
 
   try {
-    const objects = await listFolderObjects(folderKey);
+    const objects = await listFolderObjects(`users/${userId}/${folder}`);
     if (!objects || objects.length === 0) {
-      res.status(404).json({ message: 'Folder not found or empty' });
+      res.status(404).json({ message: 'No files found in folder' });
       return;
     }
 
@@ -239,4 +248,4 @@ export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Respo
     console.error('Download error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
-}; 
+};

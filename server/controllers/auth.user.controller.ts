@@ -105,8 +105,37 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response): Pro
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
 
-    res.json({ token, user });
+    res.json({
+      token,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Login failed' });
+  }
+};
+
+export const getMe = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user.userId;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    res.json({
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to get user data' });
   }
 }; 

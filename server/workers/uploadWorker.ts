@@ -17,8 +17,12 @@ interface WorkerResponse {
 }
 
 const { file, userId, folderPath } = workerData as WorkerData;
-const prefix = folderPath ? `${folderPath}/` : '';
-const Key = `users/${userId}/${prefix}${file.originalname}`;
+let prefix = folderPath ? folderPath : '';
+if (prefix.startsWith(`users/${userId}/`)) {
+  prefix = prefix.slice((`users/${userId}/`).length);
+}
+prefix = prefix.replace(/^\/+|\/+$/g, ''); // Remove any leading/trailing slashes
+const Key = `users/${userId}${prefix ? '/' + prefix : ''}/${file.originalname}`;
 
 const uploadToS3 = async (): Promise<void> => {
   const fileStream = fs.createReadStream(file.path);

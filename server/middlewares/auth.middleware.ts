@@ -9,17 +9,17 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: string;
+        userId: string;
       };
     }
   }
 }
 
-export const verifyToken = (req: Request, res: Response, next: NextFunction): void => {
-  const token = req.query.token as string || req.headers['authorization']?.split(' ')[1];
+export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
+  const token = req.headers['authorization']?.split(' ')[1];
 
   if (!token) {
-    res.status(403).json({ message: 'Token is missing' });
+    res.status(401).json({ message: 'Token is missing' });
     return;
   }
 
@@ -29,8 +29,7 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction): vo
       return;
     }
 
-    console.log('Decoded Token:', decoded);
-    req.user = { id: (decoded as JwtPayload).userId };
+    req.user = { userId: (decoded as JwtPayload).userId };
     next();
   });
 }; 

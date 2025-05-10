@@ -8,7 +8,7 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 interface CorsOptions {
   origin: string[];
@@ -19,7 +19,6 @@ interface CorsOptions {
 
 const corsOptions: CorsOptions = {
   origin: [
-    'https://kzmgdwzhhmzrrp39ip84.lite.vusercontent.net',
     'http://localhost:5000',
     'http://192.168.1.7:5000',
     'http://172.23.128.1:5000'
