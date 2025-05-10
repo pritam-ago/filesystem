@@ -32,8 +32,6 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
     deleteItem,
     downloadFile,
     downloadFolder,
-    copyFiles,
-    moveFiles,
     renameItem,
   } = useFileManager()
 
@@ -119,38 +117,6 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
     }
   }
 
-  const handleCopyFiles = async (keys: string[], targetFolder: string) => {
-    try {
-      await copyFiles(keys, targetFolder)
-      toast({
-        title: "Files copied",
-        description: `${keys.length} file(s) have been copied successfully.`,
-      })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to copy files. Please try again.",
-      })
-    }
-  }
-
-  const handleMoveFiles = async (keys: string[], targetFolder: string) => {
-    try {
-      await moveFiles(keys, targetFolder)
-      toast({
-        title: "Files moved",
-        description: `${keys.length} file(s) have been moved successfully.`,
-      })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to move files. Please try again.",
-      })
-    }
-  }
-
   const handleRenameItem = async (key: string, newName: string, isFolder: boolean) => {
     try {
       await renameItem(key, newName, isFolder)
@@ -169,7 +135,14 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <FileManagerHeader onCreateFolder={handleCreateFolder} onUploadFiles={handleUploadFiles} />
+      <FileManagerHeader
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
+        onCreateFolder={handleCreateFolder}
+        onUploadFiles={handleUploadFiles}
+        isUploading={isUploading}
+        uploadProgress={uploadProgress}
+      />
       <FileManagerBreadcrumb path={currentPath} onNavigate={handleNavigate} />
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
@@ -189,13 +162,10 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
           onDeleteItem={handleDeleteItem}
           onDownloadFile={handleDownloadFile}
           onDownloadFolder={handleDownloadFolder}
-          onCopyFiles={handleCopyFiles}
-          onMoveFiles={handleMoveFiles}
           onRenameItem={handleRenameItem}
           onUploadFiles={handleUploadFiles}
         />
       )}
-      {isUploading && <FileManagerUploadProgress progress={uploadProgress} />}
     </div>
   )
 }

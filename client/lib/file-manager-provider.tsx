@@ -18,8 +18,6 @@ interface FileManagerContextType {
   deleteItem: (key: string, isFolder: boolean) => Promise<void>
   downloadFile: (file: FileItem) => Promise<void>
   downloadFolder: (folder: string) => Promise<void>
-  copyFiles: (keys: string[], targetFolder: string) => Promise<void>
-  moveFiles: (keys: string[], targetFolder: string) => Promise<void>
   renameItem: (key: string, newName: string, isFolder: boolean) => Promise<void>
 }
 
@@ -37,8 +35,6 @@ const FileManagerContext = createContext<FileManagerContextType>({
   deleteItem: async () => {},
   downloadFile: async () => {},
   downloadFolder: async () => {},
-  copyFiles: async () => {},
-  moveFiles: async () => {},
   renameItem: async () => {},
 })
 
@@ -86,8 +82,7 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
   }, [currentPath, fetchFiles])
 
   const downloadFile = useCallback(async (file: FileItem) => {
-    const url = await FileService.getSignedUrl(file.key)
-    window.open(url, "_blank")
+    await FileService.downloadFile(file.key)
   }, [])
 
   const downloadFolder = useCallback(async (folder: string) => {
@@ -101,16 +96,6 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
   }, [])
-
-  const copyFiles = useCallback(async (keys: string[], targetFolder: string) => {
-    await FileService.copyFiles(keys, targetFolder)
-    await fetchFiles(currentPath)
-  }, [currentPath, fetchFiles])
-
-  const moveFiles = useCallback(async (keys: string[], targetFolder: string) => {
-    await FileService.moveFiles(keys, targetFolder)
-    await fetchFiles(currentPath)
-  }, [currentPath, fetchFiles])
 
   const renameItem = useCallback(async (key: string, newName: string, isFolder: boolean) => {
     await FileService.renameFileOrFolder(key, newName, isFolder)
@@ -133,8 +118,6 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
         deleteItem,
         downloadFile,
         downloadFolder,
-        copyFiles,
-        moveFiles,
         renameItem,
       }}
     >

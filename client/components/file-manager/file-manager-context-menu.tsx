@@ -24,8 +24,6 @@ interface FileManagerContextMenuProps {
   onClose: () => void
   onDelete: (key: string, isFolder: boolean) => Promise<void>
   onDownload: () => Promise<void>
-  onCopy: (targetFolder: string) => Promise<void>
-  onMove: (targetFolder: string) => Promise<void>
   onRename: (newName: string) => Promise<void>
 }
 
@@ -37,16 +35,11 @@ export function FileManagerContextMenu({
   onClose,
   onDelete,
   onDownload,
-  onCopy,
-  onMove,
   onRename,
 }: FileManagerContextMenuProps) {
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
-  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
-  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [newName, setNewName] = useState(target.key.split("/").pop() || "")
-  const [selectedFolder, setSelectedFolder] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
   const handleRename = async () => {
@@ -56,32 +49,6 @@ export function FileManagerContextMenu({
     try {
       await onRename(newName)
       setIsRenameDialogOpen(false)
-      onClose()
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const handleCopy = async () => {
-    if (!selectedFolder) return
-
-    setIsProcessing(true)
-    try {
-      await onCopy(selectedFolder)
-      setIsCopyDialogOpen(false)
-      onClose()
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const handleMove = async () => {
-    if (!selectedFolder) return
-
-    setIsProcessing(true)
-    try {
-      await onMove(selectedFolder)
-      setIsMoveDialogOpen(false)
       onClose()
     } finally {
       setIsProcessing(false)
@@ -104,81 +71,61 @@ export function FileManagerContextMenu({
     onClose()
   }
 
-  // Filter out the current folder from the list of available folders
-  const availableFolders = folders.filter((folder) => {
-    const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.key
-    return folderPath !== target.key
-  })
-
-  // Add the root folder as an option
-  const allFolders = ["Root"].concat(availableFolders.map((folder) => folder.name))
-
   return (
     <>
-      <div className="fixed inset-0 z-50" onClick={onClose} />
       <div
-        className="fixed z-50 min-w-[160px] overflow-hidden rounded-md border bg-background p-1 shadow-md"
-        style={{
-          top: `${position.y}px`,
-          left: `${position.x}px`,
-        }}
+        className="fixed z-50 min-w-[200px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        style={{ top: position.y, left: position.x }}
       >
-        <button
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-          onClick={() => {
-            setIsRenameDialogOpen(true)
-          }}
-        >
-          <Pencil className="h-4 w-4" />
-          Rename
-        </button>
-        <button
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-          onClick={handleDownload}
-        >
-          <Download className="h-4 w-4" />
-          Download
-        </button>
-        <button
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-          onClick={() => {
-            setIsCopyDialogOpen(true)
-          }}
-        >
-          <Copy className="h-4 w-4" />
-          Copy to
-        </button>
-        <button
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-          onClick={() => {
-            setIsMoveDialogOpen(true)
-          }}
-        >
-          <Move className="h-4 w-4" />
-          Move to
-        </button>
-        <button
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-500 hover:bg-accent"
-          onClick={() => {
-            setIsDeleteDialogOpen(true)
-          }}
-        >
-          <Trash className="h-4 w-4" />
-          Delete
-        </button>
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            className="justify-start"
+            onClick={handleDownload}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {target.isFolder ? "Download as ZIP" : "Download"}
+          </Button>
+          <Button
+            variant="ghost"
+            className="justify-start"
+            onClick={() => setIsRenameDialogOpen(true)}
+          >
+            <Pencil className="mr-2 h-4 w-4" />
+            Rename
+          </Button>
+          <Button
+            variant="ghost"
+            className="justify-start text-destructive"
+            onClick={() => setIsDeleteDialogOpen(true)}
+          >
+            <Trash className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
 
-      {/* Rename Dialog */}
       <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename {target.isFolder ? "folder" : "file"}</DialogTitle>
-            <DialogDescription>Enter a new name for the {target.isFolder ? "folder" : "file"}.</DialogDescription>
+            <DialogDescription>
+              Enter a new name for this {target.isFolder ? "folder" : "file"}.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="new-name">New name</Label>
-              <Input id="new-name" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleRename()
+                  }
+                }}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -192,87 +139,6 @@ export function FileManagerContextMenu({
         </DialogContent>
       </Dialog>
 
-      {/* Copy Dialog */}
-      <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Copy to folder</DialogTitle>
-            <DialogDescription>
-              Select a destination folder to copy the {target.isFolder ? "folder" : "file"}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="destination-folder">Destination folder</Label>
-              <Select value={selectedFolder} onValueChange={setSelectedFolder}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a folder" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allFolders.map((folder) => (
-                    <SelectItem key={folder} value={folder === "Root" ? "" : folder}>
-                      <div className="flex items-center gap-2">
-                        <Folder className="h-4 w-4" />
-                        {folder}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCopyDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCopy} disabled={(!selectedFolder && selectedFolder !== "") || isProcessing}>
-              {isProcessing ? "Copying..." : "Copy"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Move Dialog */}
-      <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Move to folder</DialogTitle>
-            <DialogDescription>
-              Select a destination folder to move the {target.isFolder ? "folder" : "file"}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="destination-folder">Destination folder</Label>
-              <Select value={selectedFolder} onValueChange={setSelectedFolder}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a folder" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allFolders.map((folder) => (
-                    <SelectItem key={folder} value={folder === "Root" ? "" : folder}>
-                      <div className="flex items-center gap-2">
-                        <Folder className="h-4 w-4" />
-                        {folder}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMoveDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleMove} disabled={(!selectedFolder && selectedFolder !== "") || isProcessing}>
-              {isProcessing ? "Moving..." : "Move"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>

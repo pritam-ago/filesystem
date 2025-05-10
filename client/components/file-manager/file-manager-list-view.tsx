@@ -55,8 +55,12 @@ export function FileManagerListView({
                 <Folder className="h-4 w-4 text-primary" />
                 <span className="truncate font-medium">{folder.name}</span>
               </div>
-              <div className="col-span-2 flex items-center text-sm text-muted-foreground">—</div>
-              <div className="col-span-4 flex items-center text-sm text-muted-foreground">—</div>
+              <div className="col-span-2 flex items-center text-sm text-muted-foreground">
+                {formatFileSize(folder.size)}
+              </div>
+              <div className="col-span-4 flex items-center text-sm text-muted-foreground">
+                {formatDate(folder.lastModified)}
+              </div>
             </div>
           )
         })}

@@ -17,8 +17,6 @@ interface FileManagerContentProps {
   onDeleteItem: (key: string, isFolder: boolean) => Promise<void>
   onDownloadFile: (file: FileItem) => Promise<void>
   onDownloadFolder: (folder: string) => Promise<void>
-  onCopyFiles: (keys: string[], targetFolder: string) => Promise<void>
-  onMoveFiles: (keys: string[], targetFolder: string) => Promise<void>
   onRenameItem: (key: string, newName: string, isFolder: boolean) => Promise<void>
   onUploadFiles: (files: File[]) => Promise<void>
 }
@@ -31,8 +29,6 @@ export function FileManagerContent({
   onDeleteItem,
   onDownloadFile,
   onDownloadFolder,
-  onCopyFiles,
-  onMoveFiles,
   onRenameItem,
   onUploadFiles,
 }: FileManagerContentProps) {
@@ -101,8 +97,6 @@ export function FileManagerContent({
               ? () => onDownloadFolder(contextMenuTarget.key)
               : () => onDownloadFile(files.find((f) => f.key === contextMenuTarget.key)!)
           }
-          onCopy={(targetFolder) => onCopyFiles([contextMenuTarget.key], targetFolder)}
-          onMove={(targetFolder) => onMoveFiles([contextMenuTarget.key], targetFolder)}
           onRename={(newName) => onRenameItem(contextMenuTarget.key, newName, contextMenuTarget.isFolder)}
         />
       )}

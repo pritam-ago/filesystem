@@ -7,10 +7,9 @@ import {
   listFiles,
   deleteFileOrFolder,
   getSignedUrl,
-  copyFile,
-  moveFile,
   renameFileOrFolder,
-  downloadFolderAsZip
+  downloadFolderAsZip,
+  downloadFile
 } from '../controllers/file.controller.js';
 import {
   UploadFilesRequest,
@@ -18,7 +17,6 @@ import {
   ListFilesRequest,
   DeleteRequest,
   SignedUrlRequest,
-  CopyMoveRequest,
   RenameRequest,
   DownloadFolderRequest
 } from '../types.js';
@@ -29,11 +27,10 @@ const upload = multer({ dest: 'uploads/' });
 router.post('/upload', authenticateToken, upload.array('files'), uploadFiles as unknown as RequestHandler);
 router.post('/folder', authenticateToken, createFolder as unknown as RequestHandler);
 router.get('/list', authenticateToken, listFiles as unknown as RequestHandler);
-router.delete('/', authenticateToken, deleteFileOrFolder as unknown as RequestHandler);
-router.get('/url', authenticateToken, getSignedUrl as unknown as RequestHandler);
-router.post('/move', authenticateToken, moveFile as unknown as RequestHandler);
-router.post('/copy', authenticateToken, copyFile as unknown as RequestHandler);
+router.post('/delete', authenticateToken, deleteFileOrFolder as unknown as RequestHandler);
+router.get('/signed-url', authenticateToken, getSignedUrl as unknown as RequestHandler);
 router.post('/rename', authenticateToken, renameFileOrFolder as unknown as RequestHandler);
-router.get('/download/:folder', authenticateToken, downloadFolderAsZip as unknown as RequestHandler);
+router.get('/download/*', authenticateToken, downloadFolderAsZip as unknown as RequestHandler);
+router.get('/download-file', authenticateToken, downloadFile as unknown as RequestHandler);
 
 export default router; 

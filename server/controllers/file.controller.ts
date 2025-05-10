@@ -8,10 +8,9 @@ import {
   deleteObject,
   generateSignedUrl,
   deleteFolder,
-  copyObject,
-  moveObject,
   listFolderObjects,
-  getFileStream
+  getFileStream,
+  copyObject
 } from '../utils/s3Helpers.js';
 import archiver from 'archiver';
 import {
@@ -20,10 +19,11 @@ import {
   ListFilesRequest,
   DeleteRequest,
   SignedUrlRequest,
-  CopyMoveRequest,
   RenameRequest,
   DownloadFolderRequest
 } from '../types.js';
+import { ListObjectsV2Command } from '@aws-sdk/client-s3';
+import s3 from '../utils/s3Client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -106,21 +106,30 @@ export const deleteFileOrFolder = async (req: DeleteRequest, res: Response): Pro
   const userId = req.user.userId;
   const { key, isFolder } = req.body;
 
+  console.log('Delete request received:', { userId, key, isFolder });
+
   if (!key) {
     res.status(400).json({ message: 'Key is required' });
     return;
   }
 
-  const fullKey = `users/${userId}/${key.replace(/^\/+/, '')}`;
+  const fullKey = key;
+  console.log('Full key for deletion:', fullKey);
+
   try {
     if (isFolder) {
+      console.log('Deleting folder:', fullKey);
       await deleteFolder(fullKey);
+      console.log('Folder deleted successfully:', fullKey);
       res.status(200).json({ message: 'Folder deleted' });
     } else {
+      console.log('Deleting file:', fullKey);
       await deleteObject(fullKey);
+      console.log('File deleted successfully:', fullKey);
       res.status(200).json({ message: 'File deleted' });
     }
   } catch (err) {
+    console.error('Delete operation failed:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
@@ -135,55 +144,8 @@ export const getSignedUrl = async (req: SignedUrlRequest, res: Response): Promis
   }
 
   try {
-    const url = await generateSignedUrl(`users/${userId}/${key}`);
+    const url = await generateSignedUrl(key as string);
     res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
-  }
-};
-
-export const copyFile = async (req: CopyMoveRequest, res: Response): Promise<void> => {
-  const userId = req.user.userId;
-  const { keys, targetFolder } = req.body;
-
-  if (!keys?.length || !targetFolder) {
-    res.status(400).json({ message: 'Keys and target folder are required' });
-    return;
-  }
-
-  try {
-    const copiedFiles = [];
-    for (const key of keys) {
-      const sourceKey = `users/${userId}/${key}`;
-      const destinationKey = `users/${userId}/${targetFolder}/${key.split('/').pop()}`;
-      await copyObject(sourceKey, destinationKey);
-      copiedFiles.push({
-        key: destinationKey,
-        name: key.split('/').pop(),
-      });
-    }
-    res.json({ message: 'Files copied', copiedFiles });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
-  }
-};
-
-export const moveFile = async (req: CopyMoveRequest, res: Response): Promise<void> => {
-  const userId = req.user.userId;
-  const { keys, targetFolder } = req.body;
-
-  if (!keys?.length || !targetFolder) {
-    res.status(400).json({ message: 'Keys and target folder are required' });
-    return;
-  }
-
-  try {
-    for (const key of keys) {
-      const sourceKey = `users/${userId}/${key}`;
-      const destinationKey = `users/${userId}/${targetFolder}/${key.split('/').pop()}`;
-      await moveObject(sourceKey, destinationKey);
-    }
-    res.json({ message: 'Files moved' });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
@@ -199,21 +161,72 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
   }
 
   try {
-    const sourceKey = `users/${userId}/${key}`;
-    const destinationKey = `users/${userId}/${key.split('/').slice(0, -1).join('/')}/${newName}${isFolder ? '/' : ''}`;
-    await moveObject(sourceKey, destinationKey);
-    res.json({ message: 'Item renamed' });
+    const cleanKey = key.replace(/^\/+/, '');
+    const sourceKey = cleanKey;
+    const parentPath = cleanKey.split('/').slice(0, -1).join('/');
+    const destinationKey = `${parentPath ? parentPath + '/' : ''}${newName}${isFolder ? '/' : ''}`;
+
+    if (isFolder) {
+      // For folders, we need to copy all contents and then delete the old folder
+      const listCommand = new ListObjectsV2Command({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Prefix: sourceKey,
+      });
+      
+      const listedObjects = await s3.send(listCommand);
+      
+      if (listedObjects.Contents) {
+        // Copy all objects to their new location
+        for (const obj of listedObjects.Contents) {
+          if (!obj.Key) continue;
+          
+          // Calculate the new key by replacing the old folder name with the new one
+          const newKey = obj.Key.replace(sourceKey, destinationKey);
+          await copyObject(obj.Key, newKey);
+        }
+        
+        // Delete all objects in the old folder
+        for (const obj of listedObjects.Contents) {
+          if (!obj.Key) continue;
+          await deleteObject(obj.Key);
+        }
+      }
+    } else {
+      // For files, just copy and delete
+      await copyObject(sourceKey, destinationKey);
+      await deleteObject(sourceKey);
+    }
+
+    res.json({ message: 'Item renamed successfully' });
   } catch (err) {
+    console.error('Rename error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
+  }
+};
+
+export const downloadFile = async (req: Request, res: Response): Promise<void> => {
+  const { key } = req.query;
+  if (!key) {
+    res.status(400).json({ message: 'Key is required' });
+    return;
+  }
+  try {
+    const stream = await getFileStream(key as string);
+    res.setHeader('Content-Disposition', `attachment; filename="${(key as string).split('/').pop()}"`);
+    stream.pipe(res);
+  } catch (err) {
+    console.error('File download error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
   }
 };
 
 export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Response): Promise<void> => {
   const userId = req.user.userId;
-  const { folder } = req.params;
-
+  let folder = req.params[0];
+  if (!folder.endsWith('/')) folder += '/';
+  const fullFolderKey = `users/${userId}/${folder}`;
   try {
-    const objects = await listFolderObjects(`users/${userId}/${folder}`);
+    const objects = await listFolderObjects(fullFolderKey);
     if (!objects || objects.length === 0) {
       res.status(404).json({ message: 'No files found in folder' });
       return;
@@ -222,7 +235,7 @@ export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Respo
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${folder}.zip"`
+      `attachment; filename="${folder.split('/').filter(Boolean).pop() || 'folder'}.zip"`
     );
 
     const archive = archiver('zip', { zlib: { level: 9 } });

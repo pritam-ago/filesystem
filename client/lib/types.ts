@@ -16,11 +16,11 @@ export interface FolderItem {
   key: string
   name: string
   lastModified: Date
+  size: number
 }
 
 export interface FileOperation {
-  type: "copy" | "move" | "delete" | "rename"
+  type: "delete" | "rename"
   items: (FileItem | FolderItem)[]
-  targetFolder?: string
   newName?: string
 }

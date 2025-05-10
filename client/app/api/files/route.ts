@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { verifyAuth } from "@/lib/auth-utils"
 
-export async function DELETE(request: Request) {
+export async function POST(request: Request) {
   try {
     // Verify authentication
     const user = await verifyAuth()
@@ -12,13 +12,28 @@ export async function DELETE(request: Request) {
     const body = await request.json()
     const { key, isFolder } = body
 
-    // In a real application, you would delete the file or folder from a storage service
-    // For demo purposes, we'll just return a success response
-
-    return NextResponse.json({
-      message: `${isFolder ? "Folder" : "File"} deleted successfully`,
+    // Forward the request to the backend server
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/files/delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${user.token}`,
+      },
+      body: JSON.stringify({ key, isFolder }),
     })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to delete item")
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ message: "Something went wrong" }, { status: 500 })
+    console.error("Delete error:", error)
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Something went wrong" },
+      { status: 500 }
+    )
   }
 }

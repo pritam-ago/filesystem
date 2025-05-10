@@ -51,6 +51,7 @@ export function FileManagerGridView({
               <Folder className="h-6 w-6 text-primary" />
             </div>
             <div className="w-full truncate text-center font-medium">{folder.name}</div>
+            <div className="text-xs text-muted-foreground">{formatFileSize(folder.size)}</div>
           </div>
         )
       })}

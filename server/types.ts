@@ -46,13 +46,6 @@ export interface SignedUrlRequest extends AuthenticatedRequest {
   };
 }
 
-export interface CopyMoveRequest extends AuthenticatedRequest {
-  body: {
-    keys: string[];
-    targetFolder: string;
-  };
-}
-
 export interface RenameRequest extends AuthenticatedRequest {
   body: {
     key: string;
@@ -63,6 +56,6 @@ export interface RenameRequest extends AuthenticatedRequest {
 
 export interface DownloadFolderRequest extends AuthenticatedRequest {
   params: {
-    folder: string;
+    [key: string]: string;
   };
 } 

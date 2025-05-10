@@ -16,12 +16,14 @@ import { Readable } from 'stream';
 interface Folder {
   key: string;
   name: string;
+  size: number;
+  lastModified: Date;
 }
 
 interface File {
   key: string;
   name: string;
-  size: string;
+  size: number;
   lastModified: Date;
 }
 
@@ -30,8 +32,8 @@ interface ListObjectsResult {
   files: File[];
 }
 
-const formatSize = (bytes: number): string => {
-  if (bytes === 0) return "0 Bytes";
+const formatSize = (bytes: number | undefined): string => {
+  if (!bytes || bytes === 0) return "0 Bytes";
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -66,9 +68,48 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
     Contents: result.Contents,
   });
 
+  // First, get all folder contents to calculate sizes and last modified dates
+  const folderSizes = new Map<string, number>();
+  const folderLastModified = new Map<string, Date>();
+  
+  // Get all contents without delimiter to calculate folder sizes and last modified dates
+  const allContentsCommand = new ListObjectsV2Command({
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Prefix,
+  });
+  
+  const allContents = await s3.send(allContentsCommand);
+  
+  // Calculate folder sizes and track last modified dates
+  if (allContents.Contents) {
+    for (const obj of allContents.Contents) {
+      if (!obj.Key || !obj.Size) continue;
+      
+      // Get the folder path for this object
+      const parts = obj.Key.split('/');
+      if (parts.length > 1) {
+        // Remove the file name and join the rest to get the folder path
+        parts.pop();
+        const folderPath = parts.join('/') + '/';
+        
+        // Add the file size to the folder's total
+        const currentSize = folderSizes.get(folderPath) || 0;
+        folderSizes.set(folderPath, currentSize + obj.Size);
+
+        // Update the folder's last modified date if this file is newer
+        const currentLastModified = folderLastModified.get(folderPath);
+        if (!currentLastModified || (obj.LastModified && obj.LastModified > currentLastModified)) {
+          folderLastModified.set(folderPath, obj.LastModified || new Date());
+        }
+      }
+    }
+  }
+
   const folders = (result.CommonPrefixes || []).map(cp => ({
     key: cp.Prefix!,
-    name: cp.Prefix!.split("/").filter(Boolean).pop()!, 
+    name: cp.Prefix!.split("/").filter(Boolean).pop()!,
+    size: folderSizes.get(cp.Prefix!) || 0,
+    lastModified: folderLastModified.get(cp.Prefix!) || new Date(),
   }));
 
   const files = (result.Contents || [])
@@ -76,7 +117,7 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
     .map(obj => ({
       key: obj.Key!,
       name: obj.Key!.split("/").pop()!, 
-      size: formatSize(obj.Size || 0),
+      size: obj.Size || 0,
       lastModified: obj.LastModified || new Date(),
     }));
 
@@ -84,36 +125,73 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
 };
 
 export const deleteObject = async (Key: string): Promise<void> => {
-  const command = new DeleteObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Key,
-  });
-  await s3.send(command);
+  try {
+    console.log('Attempting to delete object:', { Bucket: process.env.AWS_BUCKET_NAME, Key });
+    
+    if (!process.env.AWS_BUCKET_NAME) {
+      throw new Error('AWS_BUCKET_NAME is not configured');
+    }
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key,
+    });
+
+    const response = await s3.send(command);
+    console.log('Delete object response:', response);
+    console.log('Successfully deleted object:', Key);
+  } catch (error) {
+    console.error('Error deleting object:', error);
+    throw error;
+  }
 };
 
 export const deleteFolder = async (folderPrefix: string): Promise<void> => {
-  const listParams = {
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Prefix: folderPrefix,
-  };
+  try {
+    console.log('Attempting to delete folder:', { Bucket: process.env.AWS_BUCKET_NAME, Prefix: folderPrefix });
+    
+    if (!process.env.AWS_BUCKET_NAME) {
+      throw new Error('AWS_BUCKET_NAME is not configured');
+    }
 
-  const listCommand = new ListObjectsV2Command(listParams);
-  const listedObjects = await s3.send(listCommand);
+    const listParams = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Prefix: folderPrefix,
+    };
 
-  if (!listedObjects.Contents || listedObjects.Contents.length === 0) return;
+    console.log('Listing objects with params:', listParams);
+    const listCommand = new ListObjectsV2Command(listParams);
+    const listedObjects = await s3.send(listCommand);
+    console.log('List objects response:', listedObjects);
 
-  const deleteParams = {
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Delete: {
-      Objects: listedObjects.Contents.map(obj => ({ Key: obj.Key! })),
-    },
-  };
+    if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+      console.log('No objects found in folder:', folderPrefix);
+      return;
+    }
 
-  const deleteCommand = new DeleteObjectsCommand(deleteParams);
-  await s3.send(deleteCommand);
+    console.log(`Found ${listedObjects.Contents.length} objects to delete in folder:`, folderPrefix);
+    console.log('Objects to delete:', listedObjects.Contents.map(obj => obj.Key));
 
-  if (listedObjects.IsTruncated) {
-    await deleteFolder(folderPrefix);
+    const deleteParams = {
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Delete: {
+        Objects: listedObjects.Contents.map(obj => ({ Key: obj.Key! })),
+      },
+    };
+
+    console.log('Delete objects params:', deleteParams);
+    const deleteCommand = new DeleteObjectsCommand(deleteParams);
+    const deleteResponse = await s3.send(deleteCommand);
+    console.log('Delete objects response:', deleteResponse);
+    console.log('Successfully deleted folder contents:', folderPrefix);
+
+    if (listedObjects.IsTruncated) {
+      console.log('Folder has more contents, continuing deletion...');
+      await deleteFolder(folderPrefix);
+    }
+  } catch (error) {
+    console.error('Error deleting folder:', error);
+    throw error;
   }
 };
 
@@ -126,50 +204,23 @@ export const generateSignedUrl = async (Key: string): Promise<string> => {
 };
 
 export const copyObject = async (sourceKey: string, destinationKey: string): Promise<void> => {
-  const command = new CopyObjectCommand({
+  const copyCommand = new CopyObjectCommand({
     Bucket: process.env.AWS_BUCKET_NAME,
-    CopySource: encodeURIComponent(`${process.env.AWS_BUCKET_NAME}/${sourceKey}`),
+    CopySource: `${process.env.AWS_BUCKET_NAME}/${sourceKey}`,
     Key: destinationKey,
   });
-  await s3.send(command);
-};
 
-export const moveObject = async (sourceKey: string, destinationKey: string): Promise<void> => {
-  if (sourceKey.endsWith('/')) {
-    const listCommand = new ListObjectsV2Command({
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Prefix: sourceKey,
-    });
-
-    const listedObjects = await s3.send(listCommand);
-    if (!listedObjects.Contents || listedObjects.Contents.length === 0) return;
-
-    for (const obj of listedObjects.Contents) {
-      const newObjectKey = obj.Key!.replace(sourceKey, destinationKey);
-      await copyObject(obj.Key!, newObjectKey);
-    }
-
-    const deleteParams = {
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Delete: {
-        Objects: listedObjects.Contents.map(obj => ({ Key: obj.Key! })),
-      },
-    };
-    await s3.send(new DeleteObjectsCommand(deleteParams));
-  } else {
-    await copyObject(sourceKey, destinationKey);
-    await deleteObject(sourceKey);
-  }
+  await s3.send(copyCommand);
 };
 
 export const listFolderObjects = async (folderKey: string): Promise<ListObjectsV2CommandOutput['Contents']> => {
   const command = new ListObjectsV2Command({
     Bucket: process.env.AWS_BUCKET_NAME,
-    Prefix: folderKey.endsWith('/') ? folderKey : `${folderKey}/`,
+    Prefix: folderKey,
   });
 
-  const data = await s3.send(command);
-  return data.Contents || [];
+  const result = await s3.send(command);
+  return result.Contents;
 };
 
 export const getFileStream = async (Key: string): Promise<Readable> => {

@@ -69,23 +69,30 @@ export class FileService {
   }
 
   static async deleteFileOrFolder(key: string, isFolder: boolean): Promise<void> {
-    const response = await fetch(`${API_URL}/files`, {
-      method: "DELETE",
-      headers: this.getHeaders(),
-      credentials: "include",
-      body: JSON.stringify({ key, isFolder }),
-    })
+    try {
+      console.log('Sending delete request:', { key, isFolder });
+      const response = await fetch(`${API_URL}/files/delete`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ key, isFolder }),
+      });
 
-    if (!response.ok) {
-      throw new Error("Failed to delete item")
+      console.log('Delete response status:', response.status);
+      const responseData = await response.json();
+      console.log('Delete response data:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.message || "Failed to delete file or folder");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      throw error;
     }
   }
 
   static async getSignedUrl(key: string): Promise<string> {
-    const url = new URL(`${API_URL}/files/url`)
-    url.searchParams.append("key", key)
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch(`${API_URL}/files/signed-url?key=${encodeURIComponent(key)}`, {
       headers: this.getHeaders(),
       credentials: "include",
     })
@@ -98,47 +105,9 @@ export class FileService {
     return data.url
   }
 
-  static async copyFiles(keys: string[], targetFolder: string): Promise<void> {
-    const response = await fetch(`${API_URL}/files/copy`, {
-      method: "POST",
-      headers: this.getHeaders(),
-      credentials: "include",
-      body: JSON.stringify({ keys, targetFolder }),
-    })
-
-    if (!response.ok) {
-      throw new Error("Failed to copy files")
-    }
-  }
-
-  static async moveFiles(keys: string[], targetFolder: string): Promise<void> {
-    const response = await fetch(`${API_URL}/files/move`, {
-      method: "POST",
-      headers: this.getHeaders(),
-      credentials: "include",
-      body: JSON.stringify({ keys, targetFolder }),
-    })
-
-    if (!response.ok) {
-      throw new Error("Failed to move files")
-    }
-  }
-
-  static async renameFileOrFolder(key: string, newName: string, isFolder: boolean): Promise<void> {
-    const response = await fetch(`${API_URL}/files/rename`, {
-      method: "POST",
-      headers: this.getHeaders(),
-      credentials: "include",
-      body: JSON.stringify({ key, newName, isFolder }),
-    })
-
-    if (!response.ok) {
-      throw new Error("Failed to rename item")
-    }
-  }
-
   static async downloadFolder(folder: string): Promise<Blob> {
-    const response = await fetch(`${API_URL}/files/download/${folder}`, {
+    const url = `${API_URL}/files/download/${encodeURIComponent(folder)}`.replace(/([^:]\/)\/+/, "$1");
+    const response = await fetch(url, {
       headers: this.getHeaders(),
       credentials: "include",
     })
@@ -148,5 +117,39 @@ export class FileService {
     }
 
     return response.blob()
+  }
+
+  static async downloadFile(key: string): Promise<void> {
+    const url = `${API_URL}/files/download-file?key=${encodeURIComponent(key)}`.replace(/([^:]\/)\/+/, "$1");
+    const response = await fetch(url, {
+      headers: this.getHeaders(),
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to download file");
+    }
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = key.split('/').pop() || "file";
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(downloadUrl);
+    document.body.removeChild(a);
+  }
+
+  static async renameFileOrFolder(key: string, newName: string, isFolder: boolean): Promise<void> {
+    const response = await fetch(`${API_URL}/files/rename`, {
+      method: "POST",
+      headers: this.getHeaders(),
+      credentials: "include",
+      body: JSON.stringify({ key, newName, isFolder }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to rename item");
+    }
   }
 } 
