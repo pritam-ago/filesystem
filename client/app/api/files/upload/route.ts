@@ -1,31 +1,39 @@
 import { NextResponse } from "next/server"
-import { verifyAuth } from "@/lib/auth-utils"
+import { getApiUrl } from "@/lib/api-config"
 
 export async function POST(request: Request) {
   try {
-    // Verify authentication
-    const user = await verifyAuth()
-    if (!user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    const formData = await request.formData()
+    const file = formData.get("file") as File
+    const folderPath = formData.get("folderPath") as string
+    const token = request.headers.get("authorization")?.split(" ")[1]
+
+    if (!file) {
+      return NextResponse.json(
+        { error: "File is required" },
+        { status: 400 }
+      )
     }
 
-    // In a real application, you would handle file uploads to a storage service
-    // For demo purposes, we'll just return a success response
-
-    const formData = await request.formData()
-    const files = formData.getAll("files") as File[]
-    const folderPath = (formData.get("folderPath") as string) || ""
-
-    const results = files.map((file) => ({
-      success: true,
-      url: `https://example.com/files/${folderPath ? folderPath + "/" : ""}${file.name}`,
-    }))
-
-    return NextResponse.json({
-      message: "Files uploaded successfully",
-      results,
+    const response = await fetch(getApiUrl("/files/upload"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
     })
+
+    if (!response.ok) {
+      throw new Error("Failed to upload file")
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ message: "Something went wrong" }, { status: 500 })
+    console.error("Error uploading file:", error)
+    return NextResponse.json(
+      { error: "Failed to upload file" },
+      { status: 500 }
+    )
   }
 }

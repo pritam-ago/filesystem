@@ -21,7 +21,7 @@ const corsOptions: CorsOptions = {
   origin: [
     'http://localhost:5000',
     'http://192.168.1.7:5000',
-    'http://172.23.128.1:5000'
+    'https://filesystem.up.railway.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization'],

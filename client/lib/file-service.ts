@@ -1,6 +1,5 @@
 import { FileItem, FolderItem } from "@/lib/types"
-
-const API_URL = "http://localhost:3000/api"
+import { getApiUrl } from "./api-config"
 
 export class FileService {
   private static getHeaders(): HeadersInit {
@@ -12,7 +11,7 @@ export class FileService {
   }
 
   static async listFiles(prefix?: string): Promise<{ folders: FolderItem[]; files: FileItem[] }> {
-    const url = new URL(`${API_URL}/files/list`)
+    const url = new URL(`${getApiUrl("/files/list")}`)
     if (prefix) {
       url.searchParams.append("prefix", prefix)
     }
@@ -39,7 +38,7 @@ export class FileService {
     }
 
     const token = localStorage.getItem("token")
-    const response = await fetch(`${API_URL}/files/upload`, {
+    const response = await fetch(getApiUrl("/files/upload"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -56,7 +55,7 @@ export class FileService {
   }
 
   static async createFolder(folderPath: string, currentFolder?: string): Promise<void> {
-    const response = await fetch(`${API_URL}/files/folder`, {
+    const response = await fetch(getApiUrl("/files/folder"), {
       method: "POST",
       headers: this.getHeaders(),
       credentials: "include",
@@ -71,8 +70,8 @@ export class FileService {
   static async deleteFileOrFolder(key: string, isFolder: boolean): Promise<void> {
     try {
       console.log('Sending delete request:', { key, isFolder });
-      const response = await fetch(`${API_URL}/files/delete`, {
-        method: "POST",
+      const response = await fetch(getApiUrl("/files/delete"), {
+        method: "DELETE",
         headers: this.getHeaders(),
         credentials: "include",
         body: JSON.stringify({ key, isFolder }),
@@ -92,7 +91,7 @@ export class FileService {
   }
 
   static async getSignedUrl(key: string): Promise<string> {
-    const response = await fetch(`${API_URL}/files/signed-url?key=${encodeURIComponent(key)}`, {
+    const response = await fetch(getApiUrl(`/files/signed-url?key=${encodeURIComponent(key)}`), {
       headers: this.getHeaders(),
       credentials: "include",
     })
@@ -106,7 +105,7 @@ export class FileService {
   }
 
   static async downloadFolder(folder: string): Promise<Blob> {
-    const url = `${API_URL}/files/download/${encodeURIComponent(folder)}`.replace(/([^:]\/)\/+/, "$1");
+    const url = `${getApiUrl("/files/download")}/${encodeURIComponent(folder)}`.replace(/([^:]\/)\/+/, "$1");
     const response = await fetch(url, {
       headers: this.getHeaders(),
       credentials: "include",
@@ -120,7 +119,7 @@ export class FileService {
   }
 
   static async downloadFile(key: string): Promise<void> {
-    const url = `${API_URL}/files/download-file?key=${encodeURIComponent(key)}`.replace(/([^:]\/)\/+/, "$1");
+    const url = `${getApiUrl("/files/download-file")}?key=${encodeURIComponent(key)}`.replace(/([^:]\/)\/+/, "$1");
     const response = await fetch(url, {
       headers: this.getHeaders(),
       credentials: "include",
@@ -140,8 +139,8 @@ export class FileService {
   }
 
   static async renameFileOrFolder(key: string, newName: string, isFolder: boolean): Promise<void> {
-    const response = await fetch(`${API_URL}/files/rename`, {
-      method: "POST",
+    const response = await fetch(getApiUrl("/files/rename"), {
+      method: "PUT",
       headers: this.getHeaders(),
       credentials: "include",
       body: JSON.stringify({ key, newName, isFolder }),
@@ -152,4 +151,91 @@ export class FileService {
       throw new Error(error.message || "Failed to rename item");
     }
   }
+}
+
+export async function uploadFile(file: File, folderId?: string) {
+  const formData = new FormData()
+  formData.append("file", file)
+  if (folderId) {
+    formData.append("folderId", folderId)
+  }
+
+  const response = await fetch(getApiUrl("/files/upload"), {
+    method: "POST",
+    body: formData,
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to upload file")
+  }
+
+  return response.json()
+}
+
+export async function createFolder(name: string, parentId?: string) {
+  const response = await fetch(getApiUrl("/files/folder"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+    body: JSON.stringify({ name, parentId }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to create folder")
+  }
+
+  return response.json()
+}
+
+export async function deleteFile(key: string) {
+  const response = await fetch(getApiUrl("/files/delete"), {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+    body: JSON.stringify({ key }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to delete file")
+  }
+
+  return response.json()
+}
+
+export async function getSignedUrl(key: string) {
+  const response = await fetch(getApiUrl(`/files/signed-url?key=${encodeURIComponent(key)}`), {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to get signed URL")
+  }
+
+  return response.json()
+}
+
+export async function renameFile(key: string, newName: string) {
+  const response = await fetch(getApiUrl("/files/rename"), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+    body: JSON.stringify({ key, newName }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to rename file")
+  }
+
+  return response.json()
 } 

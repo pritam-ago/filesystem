@@ -5,6 +5,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { UserType } from "@/lib/types"
+import { getApiUrl } from "./api-config"
 
 interface AuthContextType {
   user: UserType | null
@@ -30,31 +31,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Check if user is logged in
     const checkAuth = async () => {
-      const token = localStorage.getItem("token")
-      if (token) {
-        try {
-          const response = await fetch("http://localhost:3000/api/auth/me", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            credentials: 'include',
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            setUser(data.user)
-          } else {
-            // Token is invalid or expired
-            localStorage.removeItem("token")
-            router.push("/login")
-          }
-        } catch (error) {
-          console.error("Error fetching user:", error)
-          localStorage.removeItem("token")
-          router.push("/login")
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) {
+          setUser(null)
+          setIsLoading(false)
+          return
         }
+
+        const response = await fetch(getApiUrl("/auth/me"), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch user")
+        }
+
+        const data = await response.json()
+        setUser(data)
+      } catch (error) {
+        console.error("Auth check failed:", error)
+        localStorage.removeItem("token")
+        setUser(null)
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     checkAuth()
@@ -62,56 +65,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await fetch("http://localhost:3000/api/auth/login", {
+      const response = await fetch(getApiUrl("/auth/login"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: 'include',
         body: JSON.stringify({ email, password }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Invalid credentials")
+        throw new Error("Login failed")
       }
 
       const data = await response.json()
       localStorage.setItem("token", data.token)
       setUser(data.user)
-      router.push("/files")
+      return data
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(error.message)
-      }
-      throw new Error("Invalid credentials")
+      console.error("Login failed:", error)
+      throw error
     }
   }
 
   const signup = async (username: string, email: string, password: string) => {
     try {
-      const response = await fetch("http://localhost:3000/api/auth/signup", {
+      const response = await fetch(getApiUrl("/auth/signup"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: 'include',
         body: JSON.stringify({ username, email, password }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to create account")
+        throw new Error("Signup failed")
       }
 
-      await response.json()
-      // We don't automatically log in the user after signup
-      router.push("/login")
+      const data = await response.json()
+      localStorage.setItem("token", data.token)
+      setUser(data.user)
+      return data
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(error.message)
-      }
-      throw new Error("Failed to create account")
+      console.error("Signup failed:", error)
+      throw error
     }
   }
 

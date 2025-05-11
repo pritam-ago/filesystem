@@ -1,29 +1,36 @@
 import { NextResponse } from "next/server"
-import { verifyAuth } from "@/lib/auth-utils"
+import { getApiUrl } from "@/lib/api-config"
 
 export async function GET(request: Request) {
   try {
-    // Verify authentication
-    const user = await verifyAuth()
-    if (!user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get the key from the query parameters
     const { searchParams } = new URL(request.url)
     const key = searchParams.get("key")
+    const token = request.headers.get("authorization")?.split(" ")[1]
 
     if (!key) {
-      return NextResponse.json({ message: "Key is required" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Key is required" },
+        { status: 400 }
+      )
     }
 
-    // In a real application, you would generate a signed URL for the file
-    // For demo purposes, we'll just return a mock URL
-
-    return NextResponse.json({
-      url: `https://example.com/files/${key}`,
+    const response = await fetch(getApiUrl(`/files/signed-url?key=${encodeURIComponent(key)}`), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     })
+
+    if (!response.ok) {
+      throw new Error("Failed to get signed URL")
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ message: "Something went wrong" }, { status: 500 })
+    console.error("Error getting signed URL:", error)
+    return NextResponse.json(
+      { error: "Failed to get signed URL" },
+      { status: 500 }
+    )
   }
 }

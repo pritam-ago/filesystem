@@ -1,38 +1,29 @@
 import { NextResponse } from "next/server"
-import { verifyAuth } from "@/lib/auth-utils"
+import { getApiUrl } from "@/lib/api-config"
 
-export async function POST(request: Request) {
+export async function DELETE(request: Request) {
   try {
-    // Verify authentication
-    const user = await verifyAuth()
-    if (!user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
+    const { key } = await request.json()
+    const token = request.headers.get("authorization")?.split(" ")[1]
 
-    const body = await request.json()
-    const { key, isFolder } = body
-
-    // Forward the request to the backend server
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/files/delete`, {
-      method: "POST",
+    const response = await fetch(getApiUrl("/files/delete"), {
+      method: "DELETE",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${user.token}`,
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ key, isFolder }),
+      body: JSON.stringify({ key }),
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || "Failed to delete item")
+      throw new Error("Failed to delete file")
     }
 
-    const data = await response.json()
-    return NextResponse.json(data)
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Delete error:", error)
+    console.error("Error deleting file:", error)
     return NextResponse.json(
-      { message: error instanceof Error ? error.message : "Something went wrong" },
+      { error: "Failed to delete file" },
       { status: 500 }
     )
   }
