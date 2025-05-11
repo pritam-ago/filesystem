@@ -3,12 +3,13 @@ import { Inter } from "next/font/google"
 import { ThemeProvider } from "../components/theme-provider"
 import { AuthProvider } from "../lib/auth-provider"
 import { Toaster } from "../components/ui/toaster"
+import { InitialAuthCheck } from "../components/auth/initial-auth-check"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "File Management System",
+  title: "Folder Gumbo",
   description: "A modern file management system with authentication",
     generator: 'v0.dev'
 }
@@ -23,7 +24,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            {children}
+            <InitialAuthCheck>
+              {children}
+            </InitialAuthCheck>
             <Toaster />
           </AuthProvider>
         </ThemeProvider>

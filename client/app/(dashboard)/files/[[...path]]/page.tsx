@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { FileManager } from "@/components/file-manager/file-manager"
 
 export const metadata: Metadata = {
-  title: "Files",
+  title: "Folder Gumbo",
   description: "Manage your files and folders",
 }
 

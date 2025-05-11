@@ -163,10 +163,17 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
   }
 
   try {
+    // Clean and normalize the key
     const cleanKey = key.replace(/^\/+/, '');
-    const sourceKey = cleanKey;
-    const parentPath = cleanKey.split('/').slice(0, -1).join('/');
-    const destinationKey = `${parentPath ? parentPath + '/' : ''}${newName}${isFolder ? '/' : ''}`;
+    
+    // Split the path into parts
+    const pathParts = cleanKey.split('/');
+    const oldName = pathParts.pop() || '';
+    const parentPath = pathParts.join('/');
+    
+    // Construct source and destination keys
+    const sourceKey = isFolder ? `${parentPath}/${oldName}/` : `${parentPath}/${oldName}`;
+    const destinationKey = isFolder ? `${parentPath}/${newName}/` : `${parentPath}/${newName}`;
 
     if (isFolder) {
       // For folders, we need to copy all contents and then delete the old folder
@@ -192,6 +199,11 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
           if (!obj.Key) continue;
           await deleteObject(obj.Key);
         }
+      }
+
+      // Create an empty folder marker in the new location if the folder was empty
+      if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+        await createEmptyFolder(destinationKey);
       }
     } else {
       // For files, just copy and delete

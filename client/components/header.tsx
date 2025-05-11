@@ -41,13 +41,13 @@ export function Header({ user }: HeaderProps) {
         </Sheet>
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <FileIcon className="h-5 w-5" />
-          <span>File Manager</span>
+          <span>Folder Gumbo</span>
         </Link>
       </div>
       <div className="hidden items-center gap-2 md:flex">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <FileIcon className="h-5 w-5" />
-          <span>File Manager</span>
+          <span>Folder Gumbo</span>
         </Link>
       </div>
       <div className="ml-auto flex items-center gap-2">
