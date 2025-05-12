@@ -11,7 +11,7 @@ interface FileManagerContextType {
   folders: FolderItem[]
   isLoading: boolean
   isUploading: boolean
-  uploadProgress: number
+  uploadProgress: UploadProgress[]
   viewMode: "list" | "grid"
   setViewMode: (mode: "list" | "grid") => void
   fetchFiles: (prefix?: string) => Promise<void>
@@ -23,6 +23,13 @@ interface FileManagerContextType {
   renameItem: (key: string, newName: string, isFolder: boolean) => Promise<void>
 }
 
+interface UploadProgress {
+  fileName: string;
+  progress: number;
+  total: number;
+  loaded: number;
+}
+
 const FileManagerContext = createContext<FileManagerContextType>({
   currentPath: "",
   setCurrentPath: () => {},
@@ -30,7 +37,7 @@ const FileManagerContext = createContext<FileManagerContextType>({
   folders: [],
   isLoading: false,
   isUploading: false,
-  uploadProgress: 0,
+  uploadProgress: [],
   viewMode: "list",
   setViewMode: () => {},
   fetchFiles: async () => {},
@@ -48,7 +55,7 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [viewMode, setViewMode] = useState<"list" | "grid">("list")
 
   const fetchFiles = useCallback(async (prefix?: string) => {
@@ -69,17 +76,43 @@ export function FileManagerProvider({ children }: { children: React.ReactNode })
     await fetchFiles(currentPath)
   }, [currentPath, fetchFiles])
 
-  const uploadFiles = useCallback(async (files: File[], folder?: string) => {
-    setIsUploading(true)
-    setUploadProgress(0)
+  const uploadFiles = async (files: File[], folder?: string) => {
     try {
-      await FileService.uploadFiles(files, folder)
-      await fetchFiles(currentPath)
+      setIsUploading(true);
+      setUploadProgress([]);
+
+      // Initialize progress for each file
+      const initialProgress: UploadProgress[] = files.map(file => ({
+        fileName: file.name,
+        progress: 0,
+        total: file.size,
+        loaded: 0
+      }));
+      setUploadProgress(initialProgress);
+
+      await FileService.uploadFiles(files, folder, (progress) => {
+        setUploadProgress(prev => {
+          const newProgress = [...prev];
+          newProgress[progress.fileIndex] = {
+            ...newProgress[progress.fileIndex],
+            progress: (progress.loaded / progress.total) * 100,
+            loaded: progress.loaded,
+            total: progress.total
+          };
+          return newProgress;
+        });
+      });
+
+      // Refresh the file list after upload
+      await fetchFiles(currentPath);
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      throw error;
     } finally {
-      setIsUploading(false)
-      setUploadProgress(0)
+      setIsUploading(false);
+      setUploadProgress([]);
     }
-  }, [currentPath, fetchFiles])
+  };
 
   const deleteItem = useCallback(async (key: string, isFolder: boolean) => {
     await FileService.deleteFileOrFolder(key, isFolder)

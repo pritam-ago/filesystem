@@ -10,7 +10,10 @@ import {
   deleteFolder,
   listFolderObjects,
   getFileStream,
-  copyObject
+  copyObject,
+  createMultipartUpload,
+  uploadPart,
+  completeMultipartUpload
 } from '../utils/s3Helpers.js';
 import archiver from 'archiver';
 import {
@@ -20,7 +23,10 @@ import {
   DeleteRequest,
   SignedUrlRequest,
   RenameRequest,
-  DownloadFolderRequest
+  DownloadFolderRequest,
+  InitiateUploadRequest,
+  UploadChunkRequest,
+  CompleteUploadRequest
 } from '../types.js';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import s3 from '../utils/s3Client.js';
@@ -274,5 +280,68 @@ export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Respo
   } catch (err) {
     console.error('Download error:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error occurred' });
+  }
+};
+
+// Initialize multipart upload
+export const initiateUpload = async (req: InitiateUploadRequest, res: Response): Promise<void> => {
+  const userId = req.user.userId;
+  const { fileName, contentType, folder } = req.body;
+
+  if (!fileName) {
+    res.status(400).json({ message: 'File name is required' });
+    return;
+  }
+
+  try {
+    const key = folder ? `users/${userId}/${folder}/${fileName}` : `users/${userId}/${fileName}`;
+    const uploadId = await createMultipartUpload(key, contentType);
+
+    res.json({ uploadId, key });
+  } catch (err) {
+    console.error('Failed to initiate upload:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to initiate upload' });
+  }
+};
+
+// Upload a chunk
+export const uploadChunk = async (req: UploadChunkRequest, res: Response): Promise<void> => {
+  const { uploadId, key, partNumber } = req.body;
+  const chunk = req.file?.buffer;
+
+  if (!uploadId || !key || !partNumber || !chunk) {
+    res.status(400).json({ message: 'Missing required parameters' });
+    return;
+  }
+
+  try {
+    const part = await uploadPart(key, uploadId, partNumber, chunk);
+
+    res.json({ 
+      ETag: part.ETag,
+      PartNumber: part.PartNumber
+    });
+  } catch (err) {
+    console.error('Failed to upload chunk:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to upload chunk' });
+  }
+};
+
+// Complete multipart upload
+export const completeUpload = async (req: CompleteUploadRequest, res: Response): Promise<void> => {
+  const { uploadId, key, parts } = req.body;
+
+  if (!uploadId || !key || !parts) {
+    res.status(400).json({ message: 'Missing required parameters' });
+    return;
+  }
+
+  try {
+    await completeMultipartUpload(key, uploadId, parts);
+
+    res.json({ message: 'Upload completed successfully' });
+  } catch (err) {
+    console.error('Failed to complete upload:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to complete upload' });
   }
 };

@@ -58,4 +58,33 @@ export interface DownloadFolderRequest extends AuthenticatedRequest {
   params: {
     [key: string]: string;
   };
+}
+
+export interface InitiateUploadRequest extends Request {
+  user: { userId: string };
+  body: {
+    fileName: string;
+    contentType: string;
+    folder?: string;
+  };
+}
+
+export interface UploadChunkRequest extends Request {
+  body: {
+    uploadId: string;
+    key: string;
+    partNumber: number;
+  };
+  file?: Express.Multer.File;
+}
+
+export interface CompleteUploadRequest extends Request {
+  body: {
+    uploadId: string;
+    key: string;
+    parts: Array<{
+      ETag: string;
+      PartNumber: number;
+    }>;
+  };
 } 

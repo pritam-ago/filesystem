@@ -9,7 +9,10 @@ import {
   S3Client,
   ListObjectsV2CommandOutput,
   GetObjectCommandOutput,
-  _Object
+  _Object,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
@@ -261,4 +264,51 @@ export const getFileStream = async (Key: string): Promise<Readable> => {
   const command = new GetObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key });
   const response = await s3.send(command);
   return response.Body as Readable;
+};
+
+export const createMultipartUpload = async (key: string, contentType: string): Promise<string> => {
+  const command = new CreateMultipartUploadCommand({
+    Bucket: process.env.AWS_BUCKET_NAME!,
+    Key: key,
+    ContentType: contentType
+  });
+
+  const response = await s3.send(command);
+  return response.UploadId!;
+};
+
+export const uploadPart = async (
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  chunk: Buffer
+): Promise<{ ETag: string; PartNumber: number }> => {
+  const command = new UploadPartCommand({
+    Bucket: process.env.AWS_BUCKET_NAME!,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+    Body: chunk
+  });
+
+  const response = await s3.send(command);
+  return {
+    ETag: response.ETag!,
+    PartNumber: partNumber
+  };
+};
+
+export const completeMultipartUpload = async (
+  key: string,
+  uploadId: string,
+  parts: Array<{ ETag: string; PartNumber: number }>
+): Promise<void> => {
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: process.env.AWS_BUCKET_NAME!,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: { Parts: parts }
+  });
+
+  await s3.send(command);
 }; 

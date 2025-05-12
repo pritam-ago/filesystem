@@ -144,8 +144,6 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
         onNavigate={handleNavigate}
         onCreateFolder={handleCreateFolder}
         onUploadFiles={handleUploadFiles}
-        isUploading={isUploading}
-        uploadProgress={uploadProgress}
       />
       <FileManagerBreadcrumb path={currentPath} onNavigate={handleNavigate} />
       {isLoading ? (
@@ -170,6 +168,7 @@ export function FileManager({ initialPath = "" }: FileManagerProps) {
           onUploadFiles={handleUploadFiles}
         />
       )}
+      {isUploading && <FileManagerUploadProgress uploadProgress={uploadProgress} />}
     </div>
   )
 }
