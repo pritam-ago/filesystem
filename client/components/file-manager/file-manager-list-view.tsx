@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { Folder } from "lucide-react"
+import { Folder, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { FileItem, FolderItem } from "@/lib/types"
 import { getFileIcon, formatFileSize } from "@/lib/file-utils"
@@ -34,12 +34,20 @@ export function FileManagerListView({
     onNavigate(stripUserPrefix(folder));
   }
 
+  // Opens the same menu as right-clicking the row. stopPropagation keeps the
+  // click off the row itself, which would otherwise navigate into the folder.
+  const handleMenuClick = (e: React.MouseEvent, key: string, isFolder: boolean) => {
+    e.stopPropagation()
+    onContextMenu(e, key, isFolder)
+  }
+
   return (
     <div className="w-full overflow-hidden rounded-md border">
       <div className="grid grid-cols-12 gap-2 border-b bg-muted/50 p-2 text-xs font-medium">
-        <div className="col-span-6">Name</div>
+        <div className="col-span-5">Name</div>
         <div className="col-span-2">Size</div>
         <div className="col-span-4">Last Modified</div>
+        <div className="col-span-1 sr-only">Actions</div>
       </div>
       <div className="divide-y">
         {folders.map((folder) => {
@@ -53,8 +61,8 @@ export function FileManagerListView({
               onDoubleClick={() => handleFolderDoubleClick(folderPath)}
               onContextMenu={(e) => onContextMenu(e, folderPath, true)}
             >
-              <div className="col-span-6 flex items-center gap-2 truncate">
-                <Folder className="h-4 w-4 text-primary" />
+              <div className="col-span-5 flex items-center gap-2 truncate">
+                <Folder className="h-4 w-4 shrink-0 text-primary" />
                 <span className="truncate font-medium">{folder.name}</span>
               </div>
               <div className="col-span-2 flex items-center text-sm text-muted-foreground">
@@ -62,6 +70,16 @@ export function FileManagerListView({
               </div>
               <div className="col-span-4 flex items-center text-sm text-muted-foreground">
                 {formatDate(folder.lastModified)}
+              </div>
+              <div className="col-span-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  aria-label={`Actions for folder ${folder.name}`}
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(e) => handleMenuClick(e, folderPath, true)}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )
@@ -77,8 +95,8 @@ export function FileManagerListView({
               onClick={() => handleItemClick(file.key, false)}
               onContextMenu={(e) => onContextMenu(e, file.key, false)}
             >
-              <div className="col-span-6 flex items-center gap-2 truncate">
-                <FileIcon className="h-4 w-4 text-primary" />
+              <div className="col-span-5 flex items-center gap-2 truncate">
+                <FileIcon className="h-4 w-4 shrink-0 text-primary" />
                 <span className="truncate">{file.name}</span>
               </div>
               <div className="col-span-2 flex items-center text-sm text-muted-foreground">
@@ -86,6 +104,16 @@ export function FileManagerListView({
               </div>
               <div className="col-span-4 flex items-center text-sm text-muted-foreground">
                 {formatDate(file.lastModified)}
+              </div>
+              <div className="col-span-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  aria-label={`Actions for file ${file.name}`}
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(e) => handleMenuClick(e, file.key, false)}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )

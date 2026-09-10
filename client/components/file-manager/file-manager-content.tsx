@@ -32,7 +32,7 @@ export function FileManagerContent({
   onRenameItem,
   onUploadFiles,
 }: FileManagerContentProps) {
-  const { viewMode, selectedItems, setSelectedItems } = useFileManager()
+  const { viewMode } = useFileManager()
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [contextMenuTarget, setContextMenuTarget] = useState<{ key: string; isFolder: boolean } | null>(null)
 
@@ -67,8 +67,6 @@ export function FileManagerContent({
           files={files}
           folders={folders}
           currentPath={currentPath}
-          selectedItems={selectedItems}
-          setSelectedItems={setSelectedItems}
           onNavigate={onNavigate}
           onContextMenu={handleContextMenu}
         />
@@ -77,8 +75,6 @@ export function FileManagerContent({
           files={files}
           folders={folders}
           currentPath={currentPath}
-          selectedItems={selectedItems}
-          setSelectedItems={setSelectedItems}
           onNavigate={onNavigate}
           onContextMenu={handleContextMenu}
         />

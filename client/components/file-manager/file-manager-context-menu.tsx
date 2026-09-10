@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Copy, Download, Folder, Move, Pencil, Trash } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -71,39 +71,75 @@ export function FileManagerContextMenu({
     onClose()
   }
 
+  // Close on Escape, matching how the menu behaves everywhere else.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [onClose])
+
+  // The menu is opened either at the pointer (right-click) or at the actions
+  // button, which sits hard against the right edge of a row. Clamp it into the
+  // viewport so it never opens off-screen.
+  const MENU_WIDTH = 200
+  const MENU_HEIGHT = 150
+  const MARGIN = 8
+  const viewportWidth = typeof window === "undefined" ? Number.MAX_SAFE_INTEGER : window.innerWidth
+  const viewportHeight = typeof window === "undefined" ? Number.MAX_SAFE_INTEGER : window.innerHeight
+  const left = Math.max(MARGIN, Math.min(position.x, viewportWidth - MENU_WIDTH - MARGIN))
+  const top = Math.max(MARGIN, Math.min(position.y, viewportHeight - MENU_HEIGHT - MARGIN))
+
+  // While a dialog is open it owns the interaction, so the popup and its
+  // backdrop step aside rather than unmounting the dialog underneath it.
+  const isDialogOpen = isRenameDialogOpen || isDeleteDialogOpen
+
   return (
     <>
-      <div
-        className="fixed z-50 min-w-[200px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-        style={{ top: position.y, left: position.x }}
-      >
-        <div className="flex flex-col">
-          <Button
-            variant="ghost"
-            className="justify-start"
-            onClick={handleDownload}
+      {!isDialogOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={onClose}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              onClose()
+            }}
+          />
+          <div
+            className="fixed z-50 min-w-[200px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            style={{ top, left }}
           >
-            <Download className="mr-2 h-4 w-4" />
-            {target.isFolder ? "Download as ZIP" : "Download"}
-          </Button>
-          <Button
-            variant="ghost"
-            className="justify-start"
-            onClick={() => setIsRenameDialogOpen(true)}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            Rename
-          </Button>
-          <Button
-            variant="ghost"
-            className="justify-start text-destructive"
-            onClick={() => setIsDeleteDialogOpen(true)}
-          >
-            <Trash className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-        </div>
-      </div>
+            <div className="flex flex-col">
+              <Button
+                variant="ghost"
+                className="justify-start"
+                onClick={handleDownload}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {target.isFolder ? "Download as ZIP" : "Download"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="justify-start"
+                onClick={() => setIsRenameDialogOpen(true)}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Rename
+              </Button>
+              <Button
+                variant="ghost"
+                className="justify-start text-destructive"
+                onClick={() => setIsDeleteDialogOpen(true)}
+              >
+                <Trash className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
 
       <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
         <DialogContent>
