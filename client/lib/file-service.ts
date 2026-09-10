@@ -206,7 +206,11 @@ export class FileService {
   }
 
   static async downloadFolder(folder: string): Promise<Blob> {
-    const url = `${getApiUrl("/files/download")}/${encodeURIComponent(folder)}`.replace(/([^:]\/)\/+/, "$1");
+    // The API resolves this path relative to the caller's own user prefix and
+    // prepends users/<id>/ itself, but the UI hands us a full object key. Left
+    // as-is the server looked for users/<id>/users/<id>/... and 404'd.
+    const relativeFolder = folder.replace(/^users\/[^/]+\//, "").replace(/\/+$/, "")
+    const url = `${getApiUrl("/files/download")}/${encodeURIComponent(relativeFolder)}`.replace(/([^:]\/)\/+/, "$1");
     const response = await fetch(url, {
       headers: this.getHeaders(),
       credentials: "include",
