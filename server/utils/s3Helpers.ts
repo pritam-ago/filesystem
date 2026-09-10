@@ -78,35 +78,47 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
   const folderSizes = new Map<string, number>();
   const folderLastModified = new Map<string, Date>();
   
-  // Get all contents without delimiter to calculate folder sizes and last modified dates
-  const allContentsCommand = new ListObjectsV2Command({
-    Bucket: process.env.S3_BUCKET,
-    Prefix,
-  });
-  
-  const allContents = await s3.send(allContentsCommand);
-  
-  // Calculate folder sizes and track last modified dates
-  if (allContents.Contents) {
-    for (const obj of allContents.Contents) {
-      if (!obj.Key || !obj.Size) continue;
-      
-      // Get the folder path for this object
-      const parts = obj.Key.split('/');
-      if (parts.length > 1) {
-        // Remove the file name and join the rest to get the folder path
-        parts.pop();
-        const folderPath = parts.join('/') + '/';
-        
-        // Add the file size to the folder's total
-        const currentSize = folderSizes.get(folderPath) || 0;
-        folderSizes.set(folderPath, currentSize + obj.Size);
+  // Get all contents without delimiter to calculate folder sizes and last
+  // modified dates. ListObjectsV2 caps a response at 1000 keys, so page through
+  // the whole prefix - otherwise folders past the first page are sized as 0.
+  const allObjects: _Object[] = [];
+  let ContinuationToken: string | undefined;
 
-        // Update the folder's last modified date if this file is newer
-        const currentLastModified = folderLastModified.get(folderPath);
-        if (!currentLastModified || (obj.LastModified && obj.LastModified > currentLastModified)) {
-          folderLastModified.set(folderPath, obj.LastModified || new Date());
-        }
+  do {
+    const page: ListObjectsV2CommandOutput = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: process.env.S3_BUCKET,
+        Prefix,
+        ContinuationToken,
+      })
+    );
+    if (page.Contents) allObjects.push(...page.Contents);
+    ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (ContinuationToken);
+
+  // Calculate folder sizes and track last modified dates.
+  //
+  // Each object counts towards EVERY folder above it, not just its immediate
+  // parent, so a folder's reported size includes everything nested beneath it.
+  // Attributing only to the direct parent meant a folder containing just
+  // subfolders reported 0 bytes.
+  for (const obj of allObjects) {
+    if (!obj.Key) continue;
+
+    const size = obj.Size || 0;
+    const parts = obj.Key.split('/');
+    parts.pop(); // drop the object's own name, leaving its ancestor folders
+
+    let ancestor = '';
+    for (const part of parts) {
+      ancestor += `${part}/`;
+
+      folderSizes.set(ancestor, (folderSizes.get(ancestor) || 0) + size);
+
+      // Update the folder's last modified date if this object is newer
+      const currentLastModified = folderLastModified.get(ancestor);
+      if (!currentLastModified || (obj.LastModified && obj.LastModified > currentLastModified)) {
+        folderLastModified.set(ancestor, obj.LastModified || new Date());
       }
     }
   }
