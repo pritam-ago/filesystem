@@ -26,7 +26,7 @@ interface S3FolderData {
 }
 
 const createS3Folders = async (userId: Types.ObjectId): Promise<S3FolderData> => {
-  const bucketName = process.env.AWS_BUCKET_NAME;
+  const bucketName = process.env.S3_BUCKET;
   const baseKey = `users/${userId}/`;
 
   const folders = ['images/', 'documents/', 'videos/'];

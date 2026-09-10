@@ -184,7 +184,7 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
     if (isFolder) {
       // For folders, we need to copy all contents and then delete the old folder
       const listCommand = new ListObjectsV2Command({
-        Bucket: process.env.AWS_BUCKET_NAME,
+        Bucket: process.env.S3_BUCKET,
         Prefix: sourceKey,
       });
       

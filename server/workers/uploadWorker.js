@@ -12,7 +12,7 @@ const uploadToS3 = async () => {
 
   try {
     await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       Key,
       Body: fileStream,
       ContentType: file.mimetype,

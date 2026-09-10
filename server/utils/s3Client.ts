@@ -3,27 +3,34 @@ import dotenv from 'dotenv';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 dotenv.config();
 
-// Log environment variables (without sensitive values)
-console.log('AWS Configuration:', {
-  region: process.env.AWS_REGION,
-  bucketName: process.env.AWS_BUCKET_NAME,
-  hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
-  hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+// Log storage configuration (without sensitive values)
+console.log('S3 configuration:', {
+  endpoint: process.env.S3_ENDPOINT || '(AWS default)',
+  region: process.env.S3_REGION,
+  bucket: process.env.S3_BUCKET,
+  hasAccessKey: !!process.env.S3_ACCESS_KEY_ID,
+  hasSecretKey: !!process.env.S3_SECRET_ACCESS_KEY,
 });
 
-if (!process.env.AWS_REGION || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-  throw new Error('Missing required AWS environment variables');
+if (!process.env.S3_REGION || !process.env.S3_ACCESS_KEY_ID || !process.env.S3_SECRET_ACCESS_KEY) {
+  throw new Error('Missing required S3 environment variables');
 }
 
-if (!process.env.AWS_BUCKET_NAME) {
-  throw new Error('AWS_BUCKET_NAME is not configured');
+if (!process.env.S3_BUCKET) {
+  throw new Error('S3_BUCKET is not configured');
 }
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION,
+  // Any S3-compatible endpoint (MinIO, R2, Spaces...). Must be undefined,
+  // not an empty string, so the SDK resolves the real AWS endpoint when unset.
+  endpoint: process.env.S3_ENDPOINT || undefined,
+  // Addresses buckets as <endpoint>/<bucket> rather than <bucket>.<endpoint>,
+  // which is what non-AWS providers expect and AWS still accepts.
+  forcePathStyle: true,
+  region: process.env.S3_REGION,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
   },
 });
 
@@ -33,7 +40,7 @@ const testS3Connection = async () => {
     console.log('Testing S3 connection...');
     // Try to list objects in the bucket
     const command = new ListObjectsV2Command({
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       MaxKeys: 1,
     });
     await s3.send(command);
@@ -46,4 +53,4 @@ const testS3Connection = async () => {
 
 testS3Connection().catch(console.error);
 
-export default s3; 
+export default s3;
