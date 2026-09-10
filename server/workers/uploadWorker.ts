@@ -2,7 +2,7 @@ import { workerData, parentPort } from 'worker_threads';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import s3 from '../utils/s3Client.js';
 import fs from 'fs';
-import { generateThumbnail } from '../utils/thumbnailGenerator.js';
+import { ensureThumbnail } from '../utils/thumbnails.js';
 
 interface WorkerData {
   file: Express.Multer.File;
@@ -38,25 +38,8 @@ const uploadToS3 = async (): Promise<void> => {
       ContentType: file.mimetype,
     }));
 
-    // Generate and upload thumbnail if supported
-    let thumbnailKey: string | undefined;
-    if (file.mimetype.startsWith('image/') || 
-        file.mimetype.startsWith('video/') || 
-        file.mimetype === 'application/pdf') {
-      try {
-        const thumbnailBuffer = await generateThumbnail(Key, file.mimetype);
-        thumbnailKey = `thumbnails/${Key}`;
-        
-        await s3.send(new PutObjectCommand({
-          Bucket: process.env.S3_BUCKET,
-          Key: thumbnailKey,
-          Body: thumbnailBuffer,
-          ContentType: 'image/jpeg',
-        }));
-      } catch (error) {
-        console.error('Failed to generate thumbnail:', error);
-      }
-    }
+    // Same helper the chunked upload path uses, so the two cannot drift.
+    const thumbnailKey = await ensureThumbnail(Key);
 
     fs.unlinkSync(file.path);
     parentPort?.postMessage({ 

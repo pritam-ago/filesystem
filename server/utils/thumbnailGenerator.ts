@@ -5,22 +5,30 @@ import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuidv4 } from 'uuid';
-import { getFileStream } from './s3Helpers.js';
+import { getFileStream, generateSignedUrl } from './s3Helpers.js';
 
 const THUMBNAIL_SIZE = 200; // Size in pixels for the thumbnail
 
+const FFMPEG_TIMEOUT_MS = 30_000;
+
 export async function generateThumbnail(key: string, mimeType: string): Promise<Buffer> {
-  const fileStream = await getFileStream(key);
-  
   if (mimeType.startsWith('image/')) {
-    return generateImageThumbnail(fileStream);
-  } else if (mimeType.startsWith('video/')) {
-    return generateVideoThumbnail(fileStream, mimeType);
-  } else if (mimeType === 'application/pdf') {
-    return generatePdfThumbnail(fileStream);
+    return generateImageThumbnail(await getFileStream(key));
   }
-  
-  throw new Error('Unsupported file type for thumbnail generation');
+
+  if (mimeType.startsWith('video/')) {
+    // ffmpeg reads the object over a presigned URL and seeks straight to the
+    // frame it wants, so a 57MB recording costs a couple of range requests
+    // rather than a full download. Streaming the whole file through the server
+    // first took an order of magnitude longer.
+    return generateVideoThumbnail(await generateSignedUrl(key));
+  }
+
+  if (mimeType === 'application/pdf') {
+    return generatePdfThumbnail(await getFileStream(key));
+  }
+
+  throw new Error(`Unsupported file type for thumbnail generation: ${mimeType}`);
 }
 
 async function generateImageThumbnail(fileStream: Readable): Promise<Buffer> {
@@ -34,42 +42,47 @@ async function generateImageThumbnail(fileStream: Readable): Promise<Buffer> {
     .toBuffer();
 }
 
-async function generateVideoThumbnail(fileStream: Readable, mimeType: string): Promise<Buffer> {
-  const tempInputPath = join(tmpdir(), `${uuidv4()}-input`);
+async function generateVideoThumbnail(sourceUrl: string): Promise<Buffer> {
   const tempOutputPath = join(tmpdir(), `${uuidv4()}-output.jpg`);
-  
+
   try {
-    // Write the video stream to a temporary file
-    await writeFile(tempInputPath, await streamToBuffer(fileStream));
-    
-    // Use ffmpeg to extract a frame from the video
     await new Promise<void>((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', [
-        '-i', tempInputPath,
-        '-ss', '00:00:01', // Extract frame at 1 second
-        '-vframes', '1',
+        // -ss before -i seeks by keyframe before decoding, which is what keeps
+        // this cheap over the network. After -i it would decode from the start.
+        '-ss', '00:00:01',
+        '-i', sourceUrl,
+        '-frames:v', '1',
+        // -update tells the image2 muxer a single file is intended, rather than
+        // warning that the filename has no %03d sequence pattern.
+        '-update', '1',
         '-vf', `scale=${THUMBNAIL_SIZE}:${THUMBNAIL_SIZE}:force_original_aspect_ratio=increase,crop=${THUMBNAIL_SIZE}:${THUMBNAIL_SIZE}`,
         '-y',
         tempOutputPath
       ]);
-      
+
+      // A short or unreadable video can leave ffmpeg waiting on input forever;
+      // never let that hold a request open.
+      const timeout = setTimeout(() => {
+        ffmpeg.kill('SIGKILL');
+        reject(new Error('FFmpeg timed out generating a video thumbnail'));
+      }, FFMPEG_TIMEOUT_MS);
+
       ffmpeg.on('close', (code) => {
+        clearTimeout(timeout);
         if (code === 0) resolve();
         else reject(new Error(`FFmpeg process exited with code ${code}`));
       });
-      
-      ffmpeg.on('error', reject);
+
+      ffmpeg.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
-    
-    // Read the generated thumbnail
-    const thumbnailBuffer = await readFile(tempOutputPath);
-    return thumbnailBuffer;
+
+    return await readFile(tempOutputPath);
   } finally {
-    // Clean up temporary files
-    await Promise.all([
-      unlink(tempInputPath).catch(() => {}),
-      unlink(tempOutputPath).catch(() => {})
-    ]);
+    await unlink(tempOutputPath).catch(() => {});
   }
 }
 

@@ -2,10 +2,34 @@
 
 import type React from "react"
 
+import { useState } from "react"
+
 import { Folder, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { FileItem, FolderItem } from "@/lib/types"
 import { getFileIcon, formatFileSize } from "@/lib/file-utils"
+
+// Shows the real thumbnail where one exists, falling back to the type icon for
+// everything else - unsupported types, files predating thumbnail support, or an
+// expired URL.
+function RowThumbnail({ file }: { file: FileItem }) {
+  const [failed, setFailed] = useState(false)
+  const FileIcon = getFileIcon(file.name)
+
+  if (file.thumbnailUrl && !failed) {
+    return (
+      <img
+        src={file.thumbnailUrl}
+        alt=""
+        loading="lazy"
+        className="h-5 w-5 shrink-0 rounded object-cover"
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+
+  return <FileIcon className="h-4 w-4 shrink-0 text-primary" />
+}
 
 interface FileManagerListViewProps {
   files: FileItem[]
@@ -86,8 +110,6 @@ export function FileManagerListView({
         })}
 
         {files.map((file) => {
-          const FileIcon = getFileIcon(file.name)
-
           return (
             <div
               key={file.key}
@@ -96,7 +118,7 @@ export function FileManagerListView({
               onContextMenu={(e) => onContextMenu(e, file.key, false)}
             >
               <div className="col-span-5 flex items-center gap-2 truncate">
-                <FileIcon className="h-4 w-4 shrink-0 text-primary" />
+                <RowThumbnail file={file} />
                 <span className="truncate">{file.name}</span>
               </div>
               <div className="col-span-2 flex items-center text-sm text-muted-foreground">

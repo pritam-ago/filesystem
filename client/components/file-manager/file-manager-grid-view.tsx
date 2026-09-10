@@ -2,6 +2,8 @@
 
 import type React from "react"
 
+import { useState } from "react"
+
 import { Folder, FileText, Image, Video, File, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { FileItem, FolderItem } from "@/lib/types"
@@ -16,6 +18,47 @@ interface FileManagerGridViewProps {
 }
 
 const stripUserPrefix = (path: string) => path.replace(/^users\/[^/]+\//, "");
+
+// The API returns a presigned thumbnailUrl only when a thumbnail actually
+// exists in storage. Everything else - unsupported types, files uploaded before
+// thumbnails worked, a URL that has since expired - falls back to the type icon
+// rather than rendering a broken image.
+function FileThumbnail({ file }: { file: FileItem }) {
+  const [failed, setFailed] = useState(false)
+
+  if (file.thumbnailUrl && !failed) {
+    return (
+      <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-primary/10">
+        <img
+          src={file.thumbnailUrl}
+          alt={file.name}
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+        {file.type?.startsWith("video/") && (
+          <span className="absolute bottom-1 right-1 rounded bg-black/60 p-0.5">
+            <Video className="h-3 w-3 text-white" />
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const Icon = file.type?.startsWith("image/")
+    ? Image
+    : file.type?.startsWith("video/")
+      ? Video
+      : file.type === "application/pdf"
+        ? FileText
+        : File
+
+  return (
+    <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-primary/10">
+      <Icon className="h-8 w-8 text-primary" />
+    </div>
+  )
+}
 
 export function FileManagerGridView({
   files,
@@ -51,80 +94,6 @@ export function FileManagerGridView({
       <MoreVertical className="h-4 w-4" />
     </button>
   )
-
-  const getFileThumbnail = (file: FileItem) => {
-    const extension = file.name.split('.').pop()?.toLowerCase()
-    
-    if (file.thumbnailUrl) {
-      return (
-        <div className="relative h-24 w-24 overflow-hidden rounded-lg">
-          <img
-            src={file.thumbnailUrl}
-            alt={file.name}
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = '/placeholder-image.png';
-            }}
-          />
-        </div>
-      )
-    }
-    
-    if (file.type?.startsWith('image/')) {
-      return (
-        <div className="relative h-24 w-24 overflow-hidden rounded-lg">
-        <img
-          src={file.url}
-          alt={file.name}
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = '/placeholder-image.png';
-            }}
-        />
-        </div>
-      )
-    }
-    
-    if (file.type?.startsWith('video/')) {
-      return (
-        <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-primary/10">
-          {file.url ? (
-            <video
-              src={file.url}
-              className="h-full w-full object-cover"
-              preload="metadata"
-            />
-          ) : (
-            <Video className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-primary" />
-          )}
-        </div>
-      )
-    }
-    
-    if (file.type === 'application/pdf') {
-      return (
-        <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-primary/10">
-          {file.url ? (
-            <iframe
-              src={`${file.url}#toolbar=0&navpanes=0`}
-              className="h-full w-full"
-              title={file.name}
-            />
-          ) : (
-            <FileText className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-primary" />
-          )}
-        </div>
-      )
-    }
-    
-    return (
-      <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-primary/10">
-        <File className="h-8 w-8 text-primary" />
-      </div>
-    )
-  }
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -167,7 +136,7 @@ export function FileManagerGridView({
             onContextMenu={(e) => onContextMenu(e, file.key, false)}
           >
             {menuButton(file.key, false, file.name)}
-            {getFileThumbnail(file)}
+            <FileThumbnail file={file} />
             <div className="mt-2 w-full truncate text-center font-medium">{file.name}</div>
             <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>
           </div>

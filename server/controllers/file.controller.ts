@@ -30,6 +30,7 @@ import {
 } from '../types.js';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import s3 from '../utils/s3Client.js';
+import { ensureThumbnail, deleteThumbnails, moveThumbnails } from '../utils/thumbnails.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -144,11 +145,13 @@ export const deleteFileOrFolder = async (req: DeleteRequest, res: Response): Pro
     if (isFolder) {
       console.log('Deleting folder:', fullKey);
       await deleteFolder(fullKey);
+      await deleteThumbnails(fullKey.endsWith('/') ? fullKey : `${fullKey}/`);
       console.log('Folder deleted successfully:', fullKey);
       res.status(200).json({ message: 'Folder deleted' });
     } else {
       console.log('Deleting file:', fullKey);
       await deleteObject(fullKey);
+      await deleteThumbnails(fullKey);
       console.log('File deleted successfully:', fullKey);
       res.status(200).json({ message: 'File deleted' });
     }
@@ -226,6 +229,9 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
         }
       }
 
+      // Previews live at thumbnails/<key>, so the whole subtree moves too.
+      await moveThumbnails(sourceKey, destinationKey);
+
       // Create an empty folder marker in the new location if the folder was empty
       if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
         await createEmptyFolder(destinationKey);
@@ -234,6 +240,10 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
       // For files, just copy and delete
       await copyObject(sourceKey, destinationKey);
       await deleteObject(sourceKey);
+
+      // The extension is fixed across a rename, so the existing preview is
+      // still valid - move it rather than regenerate it.
+      await moveThumbnails(sourceKey, destinationKey);
     }
 
     res.json({ message: 'Item renamed successfully' });
@@ -358,7 +368,13 @@ export const completeUpload = async (req: CompleteUploadRequest, res: Response):
   try {
     await completeMultipartUpload(key, uploadId, parts);
 
-    res.json({ message: 'Upload completed successfully' });
+    // The chunked path is the only one the UI uses, and it never produced a
+    // thumbnail - generation lived solely in the worker behind /files/upload,
+    // which nothing calls. Done before responding so the listing the client
+    // fetches straight afterwards already has it. ensureThumbnail never throws.
+    const thumbnailKey = await ensureThumbnail(key);
+
+    res.json({ message: 'Upload completed successfully', key, thumbnailKey });
   } catch (err) {
     console.error('Failed to complete upload:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to complete upload' });

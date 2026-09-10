@@ -16,6 +16,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
+import { getMimeType, supportsThumbnail, thumbnailKeyFor, THUMBNAIL_PREFIX } from './mimeTypes.js';
 
 interface Folder {
   key: string;
@@ -130,31 +131,32 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
     lastModified: folderLastModified.get(cp.Prefix!) || new Date(),
   }));
 
+  // Which thumbnails already exist. One listing of the mirrored prefix answers
+  // that for every file at once; probing each file with its own GetObject cost
+  // a round trip per row and logged an error for every miss.
+  const existingThumbnails = new Set(
+    await listAllKeys(`${THUMBNAIL_PREFIX}${Prefix}`)
+  );
+
   const files = (result.Contents || [])
     .filter(obj => obj.Key !== Prefix)
     .map(async (obj: _Object) => {
       const key = obj.Key!;
       const name = key.split("/").pop()!;
-      const mimeType = (obj as any).ContentType || '';
+      // ListObjectsV2 never returns ContentType, so this was always '' and no
+      // file ever qualified for a thumbnail. Derive it from the extension.
+      const mimeType = getMimeType(name);
       let thumbnailUrl: string | undefined;
 
-      // Check if this file type supports thumbnails
-      if (mimeType.startsWith('image/') || 
-          mimeType.startsWith('video/') || 
-          mimeType === 'application/pdf') {
-        const thumbnailKey = `thumbnails/${key}`;
-        try {
-          // Check if thumbnail exists
-          const thumbnailCommand = new GetObjectCommand({
-            Bucket: process.env.S3_BUCKET,
-            Key: thumbnailKey,
-          });
-          await s3.send(thumbnailCommand);
-          
-          // Generate signed URL for thumbnail
-          thumbnailUrl = await getSignedUrl(s3, thumbnailCommand, { expiresIn: 3600 });
-        } catch (error) {
-          console.error('Failed to get thumbnail URL:', error);
+      if (supportsThumbnail(mimeType)) {
+        const thumbnailKey = thumbnailKeyFor(key);
+
+        if (existingThumbnails.has(thumbnailKey)) {
+          thumbnailUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: thumbnailKey }),
+            { expiresIn: 3600 }
+          );
         }
       }
 
@@ -171,6 +173,28 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
   const resolvedFiles = await Promise.all(files);
 
   return { folders, files: resolvedFiles };
+};
+
+// Every key under a prefix, following pagination past the 1000-key page cap.
+export const listAllKeys = async (Prefix: string): Promise<string[]> => {
+  const keys: string[] = [];
+  let ContinuationToken: string | undefined;
+
+  do {
+    const page: ListObjectsV2CommandOutput = await s3.send(
+      new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix, ContinuationToken })
+    );
+    for (const obj of page.Contents || []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (ContinuationToken);
+
+  return keys;
+};
+
+export const putObject = async (Key: string, Body: Buffer, ContentType?: string): Promise<void> => {
+  await s3.send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key, Body, ContentType }));
 };
 
 export const deleteObject = async (Key: string): Promise<void> => {
