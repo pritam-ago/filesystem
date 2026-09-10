@@ -48,7 +48,7 @@ const formatSize = (bytes: number | undefined): string => {
 
 export const createEmptyFolder = async (Key: string): Promise<void> => {
   const command = new PutObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.S3_BUCKET,
     Key,
     Body: '',
   });
@@ -57,13 +57,13 @@ export const createEmptyFolder = async (Key: string): Promise<void> => {
 
 export const listObjects = async (Prefix: string): Promise<ListObjectsResult> => {
   const command = new ListObjectsV2Command({
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.S3_BUCKET,
     Prefix,
     Delimiter: '/',
   });
 
   console.log('S3 ListObjectsV2Command params:', {
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.S3_BUCKET,
     Prefix,
     Delimiter: '/',
   });
@@ -78,35 +78,47 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
   const folderSizes = new Map<string, number>();
   const folderLastModified = new Map<string, Date>();
   
-  // Get all contents without delimiter to calculate folder sizes and last modified dates
-  const allContentsCommand = new ListObjectsV2Command({
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Prefix,
-  });
-  
-  const allContents = await s3.send(allContentsCommand);
-  
-  // Calculate folder sizes and track last modified dates
-  if (allContents.Contents) {
-    for (const obj of allContents.Contents) {
-      if (!obj.Key || !obj.Size) continue;
-      
-      // Get the folder path for this object
-      const parts = obj.Key.split('/');
-      if (parts.length > 1) {
-        // Remove the file name and join the rest to get the folder path
-        parts.pop();
-        const folderPath = parts.join('/') + '/';
-        
-        // Add the file size to the folder's total
-        const currentSize = folderSizes.get(folderPath) || 0;
-        folderSizes.set(folderPath, currentSize + obj.Size);
+  // Get all contents without delimiter to calculate folder sizes and last
+  // modified dates. ListObjectsV2 caps a response at 1000 keys, so page through
+  // the whole prefix - otherwise folders past the first page are sized as 0.
+  const allObjects: _Object[] = [];
+  let ContinuationToken: string | undefined;
 
-        // Update the folder's last modified date if this file is newer
-        const currentLastModified = folderLastModified.get(folderPath);
-        if (!currentLastModified || (obj.LastModified && obj.LastModified > currentLastModified)) {
-          folderLastModified.set(folderPath, obj.LastModified || new Date());
-        }
+  do {
+    const page: ListObjectsV2CommandOutput = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: process.env.S3_BUCKET,
+        Prefix,
+        ContinuationToken,
+      })
+    );
+    if (page.Contents) allObjects.push(...page.Contents);
+    ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (ContinuationToken);
+
+  // Calculate folder sizes and track last modified dates.
+  //
+  // Each object counts towards EVERY folder above it, not just its immediate
+  // parent, so a folder's reported size includes everything nested beneath it.
+  // Attributing only to the direct parent meant a folder containing just
+  // subfolders reported 0 bytes.
+  for (const obj of allObjects) {
+    if (!obj.Key) continue;
+
+    const size = obj.Size || 0;
+    const parts = obj.Key.split('/');
+    parts.pop(); // drop the object's own name, leaving its ancestor folders
+
+    let ancestor = '';
+    for (const part of parts) {
+      ancestor += `${part}/`;
+
+      folderSizes.set(ancestor, (folderSizes.get(ancestor) || 0) + size);
+
+      // Update the folder's last modified date if this object is newer
+      const currentLastModified = folderLastModified.get(ancestor);
+      if (!currentLastModified || (obj.LastModified && obj.LastModified > currentLastModified)) {
+        folderLastModified.set(ancestor, obj.LastModified || new Date());
       }
     }
   }
@@ -134,7 +146,7 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
         try {
           // Check if thumbnail exists
           const thumbnailCommand = new GetObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME,
+            Bucket: process.env.S3_BUCKET,
             Key: thumbnailKey,
           });
           await s3.send(thumbnailCommand);
@@ -163,14 +175,14 @@ export const listObjects = async (Prefix: string): Promise<ListObjectsResult> =>
 
 export const deleteObject = async (Key: string): Promise<void> => {
   try {
-    console.log('Attempting to delete object:', { Bucket: process.env.AWS_BUCKET_NAME, Key });
+    console.log('Attempting to delete object:', { Bucket: process.env.S3_BUCKET, Key });
     
-    if (!process.env.AWS_BUCKET_NAME) {
-      throw new Error('AWS_BUCKET_NAME is not configured');
+    if (!process.env.S3_BUCKET) {
+      throw new Error('S3_BUCKET is not configured');
     }
 
     const command = new DeleteObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       Key,
     });
 
@@ -185,14 +197,14 @@ export const deleteObject = async (Key: string): Promise<void> => {
 
 export const deleteFolder = async (folderPrefix: string): Promise<void> => {
   try {
-    console.log('Attempting to delete folder:', { Bucket: process.env.AWS_BUCKET_NAME, Prefix: folderPrefix });
+    console.log('Attempting to delete folder:', { Bucket: process.env.S3_BUCKET, Prefix: folderPrefix });
     
-    if (!process.env.AWS_BUCKET_NAME) {
-      throw new Error('AWS_BUCKET_NAME is not configured');
+    if (!process.env.S3_BUCKET) {
+      throw new Error('S3_BUCKET is not configured');
     }
 
     const listParams = {
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       Prefix: folderPrefix,
     };
 
@@ -210,7 +222,7 @@ export const deleteFolder = async (folderPrefix: string): Promise<void> => {
     console.log('Objects to delete:', listedObjects.Contents.map(obj => obj.Key));
 
     const deleteParams = {
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       Delete: {
         Objects: listedObjects.Contents.map(obj => ({ Key: obj.Key! })),
       },
@@ -234,7 +246,7 @@ export const deleteFolder = async (folderPrefix: string): Promise<void> => {
 
 export const generateSignedUrl = async (Key: string): Promise<string> => {
   const command = new GetObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.S3_BUCKET,
     Key,
   });
   return await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
@@ -242,8 +254,8 @@ export const generateSignedUrl = async (Key: string): Promise<string> => {
 
 export const copyObject = async (sourceKey: string, destinationKey: string): Promise<void> => {
   const copyCommand = new CopyObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
-    CopySource: `${process.env.AWS_BUCKET_NAME}/${sourceKey}`,
+    Bucket: process.env.S3_BUCKET,
+    CopySource: `${process.env.S3_BUCKET}/${sourceKey}`,
     Key: destinationKey,
   });
 
@@ -252,7 +264,7 @@ export const copyObject = async (sourceKey: string, destinationKey: string): Pro
 
 export const listFolderObjects = async (folderKey: string): Promise<ListObjectsV2CommandOutput['Contents']> => {
   const command = new ListObjectsV2Command({
-    Bucket: process.env.AWS_BUCKET_NAME,
+    Bucket: process.env.S3_BUCKET,
     Prefix: folderKey,
   });
 
@@ -261,14 +273,14 @@ export const listFolderObjects = async (folderKey: string): Promise<ListObjectsV
 };
 
 export const getFileStream = async (Key: string): Promise<Readable> => {
-  const command = new GetObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key });
+  const command = new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key });
   const response = await s3.send(command);
   return response.Body as Readable;
 };
 
 export const createMultipartUpload = async (key: string, contentType: string): Promise<string> => {
   const command = new CreateMultipartUploadCommand({
-    Bucket: process.env.AWS_BUCKET_NAME!,
+    Bucket: process.env.S3_BUCKET!,
     Key: key,
     ContentType: contentType
   });
@@ -284,7 +296,7 @@ export const uploadPart = async (
   chunk: Buffer
 ): Promise<{ ETag: string; PartNumber: number }> => {
   const command = new UploadPartCommand({
-    Bucket: process.env.AWS_BUCKET_NAME!,
+    Bucket: process.env.S3_BUCKET!,
     Key: key,
     UploadId: uploadId,
     PartNumber: partNumber,
@@ -304,7 +316,7 @@ export const completeMultipartUpload = async (
   parts: Array<{ ETag: string; PartNumber: number }>
 ): Promise<void> => {
   const command = new CompleteMultipartUploadCommand({
-    Bucket: process.env.AWS_BUCKET_NAME!,
+    Bucket: process.env.S3_BUCKET!,
     Key: key,
     UploadId: uploadId,
     MultipartUpload: { Parts: parts }

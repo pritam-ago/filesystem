@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { Folder, FileText, Image, Video, File } from "lucide-react"
+import { Folder, FileText, Image, Video, File, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { FileItem, FolderItem } from "@/lib/types"
 import { getFileIcon, formatFileSize } from "@/lib/file-utils"
@@ -33,6 +33,24 @@ export function FileManagerGridView({
   const handleFolderDoubleClick = (folder: string) => {
     onNavigate(stripUserPrefix(folder));
   }
+
+  // Opens the same menu as right-clicking the card. stopPropagation keeps the
+  // click off the card itself, which would otherwise navigate into the folder.
+  const handleMenuClick = (e: React.MouseEvent, key: string, isFolder: boolean) => {
+    e.stopPropagation()
+    onContextMenu(e, key, isFolder)
+  }
+
+  const menuButton = (key: string, isFolder: boolean, label: string) => (
+    <button
+      type="button"
+      aria-label={`Actions for ${isFolder ? "folder" : "file"} ${label}`}
+      className="absolute right-1 top-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={(e) => handleMenuClick(e, key, isFolder)}
+    >
+      <MoreVertical className="h-4 w-4" />
+    </button>
+  )
 
   const getFileThumbnail = (file: FileItem) => {
     const extension = file.name.split('.').pop()?.toLowerCase()
@@ -111,18 +129,24 @@ export function FileManagerGridView({
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {folders.map((folder) => {
-        const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.key
+        // Always the full object key, exactly as the list view does it. Building
+        // it from currentPath instead dropped the users/<id>/ prefix, which was
+        // fine for navigation (stripUserPrefix is a no-op then) but gave the
+        // actions menu a key that matches no object, so delete, rename and
+        // download all silently targeted nothing.
+        const folderPath = folder.key
 
         return (
           <div
             key={folderPath}
             className={cn(
-              "group flex cursor-pointer flex-col items-center justify-center rounded-lg border p-4 transition-colors hover:bg-accent",
+              "group relative flex cursor-pointer flex-col items-center justify-center rounded-lg border p-4 transition-colors hover:bg-accent",
             )}
             onClick={() => handleItemClick(folderPath, true)}
             onDoubleClick={() => handleFolderDoubleClick(folderPath)}
             onContextMenu={(e) => onContextMenu(e, folderPath, true)}
           >
+            {menuButton(folderPath, true, folder.name)}
             <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-primary/10">
               <Folder className="h-8 w-8 text-primary" />
             </div>
@@ -137,11 +161,12 @@ export function FileManagerGridView({
           <div
             key={file.key}
             className={cn(
-              "group flex cursor-pointer flex-col items-center justify-center rounded-lg border p-4 transition-colors hover:bg-accent",
+              "group relative flex cursor-pointer flex-col items-center justify-center rounded-lg border p-4 transition-colors hover:bg-accent",
             )}
             onClick={() => handleItemClick(file.key, false)}
             onContextMenu={(e) => onContextMenu(e, file.key, false)}
           >
+            {menuButton(file.key, false, file.name)}
             {getFileThumbnail(file)}
             <div className="mt-2 w-full truncate text-center font-medium">{file.name}</div>
             <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>

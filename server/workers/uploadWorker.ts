@@ -32,7 +32,7 @@ const uploadToS3 = async (): Promise<void> => {
   try {
     // Upload the original file
     await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
+      Bucket: process.env.S3_BUCKET,
       Key,
       Body: fileStream,
       ContentType: file.mimetype,
@@ -48,7 +48,7 @@ const uploadToS3 = async (): Promise<void> => {
         thumbnailKey = `thumbnails/${Key}`;
         
         await s3.send(new PutObjectCommand({
-          Bucket: process.env.AWS_BUCKET_NAME,
+          Bucket: process.env.S3_BUCKET,
           Key: thumbnailKey,
           Body: thumbnailBuffer,
           ContentType: 'image/jpeg',

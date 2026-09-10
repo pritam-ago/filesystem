@@ -33,6 +33,22 @@ import s3 from '../utils/s3Client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// HTTP header values may only contain Latin-1 characters, but object names can
+// hold any Unicode - macOS screen recordings, for instance, put a narrow
+// no-break space (U+202F) before AM/PM. Passing one straight to res.setHeader()
+// throws ERR_INVALID_CHAR and the download fails with a 500.
+//
+// RFC 6266: send an ASCII-safe `filename` for old clients plus an RFC 5987
+// `filename*` carrying the real UTF-8 name for everything current.
+const contentDisposition = (filename: string): string => {
+  const ascii = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+  const utf8 = encodeURIComponent(filename).replace(
+    /['()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+};
+
 export const uploadFiles = async (req: UploadFilesRequest, res: Response): Promise<void> => {
   const userId = req.user.userId;
   const files = req.files;
@@ -169,8 +185,11 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
   }
 
   try {
-    // Clean and normalize the key
-    const cleanKey = key.replace(/^\/+/, '');
+    // Clean and normalize the key. Folder keys arrive with a trailing slash
+    // (they come from ListObjectsV2 CommonPrefixes), which would otherwise
+    // make pathParts.pop() return '' and produce a '//' source prefix that
+    // matches nothing.
+    const cleanKey = key.replace(/^\/+/, '').replace(/\/+$/, '');
     
     // Split the path into parts
     const pathParts = cleanKey.split('/');
@@ -184,7 +203,7 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
     if (isFolder) {
       // For folders, we need to copy all contents and then delete the old folder
       const listCommand = new ListObjectsV2Command({
-        Bucket: process.env.AWS_BUCKET_NAME,
+        Bucket: process.env.S3_BUCKET,
         Prefix: sourceKey,
       });
       
@@ -232,7 +251,7 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
   }
   try {
     const stream = await getFileStream(key as string);
-    res.setHeader('Content-Disposition', `attachment; filename="${(key as string).split('/').pop()}"`);
+    res.setHeader('Content-Disposition', contentDisposition((key as string).split('/').pop() || 'download'));
     stream.pipe(res);
   } catch (err) {
     console.error('File download error:', err);
@@ -255,7 +274,7 @@ export const downloadFolderAsZip = async (req: DownloadFolderRequest, res: Respo
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${folder.split('/').filter(Boolean).pop() || 'folder'}.zip"`
+      contentDisposition(`${folder.split('/').filter(Boolean).pop() || 'folder'}.zip`)
     );
 
     const archive = archiver('zip', { zlib: { level: 9 } });

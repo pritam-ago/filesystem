@@ -1,27 +1,17 @@
-import { workerData, parentPort } from 'worker_threads';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import s3 from '../utils/s3Client.js';
-import fs from 'fs';
+// Dev-only worker entry point.
+//
+// file.controller.ts spawns '../workers/uploadWorker.js'. Running from source
+// that path resolves to this file; in a production build it resolves to
+// dist/workers/uploadWorker.js, compiled from uploadWorker.ts, and this file is
+// never loaded. So this exists purely to get the TypeScript worker running
+// under tsx.
+//
+// Worker threads do not inherit tsx's module hooks. The old `node --loader`
+// flag applied process-wide, including to workers, which is why this used to
+// work; module.register() is per-thread, so the hooks have to be installed
+// here before the TypeScript worker is imported.
+import { register } from 'tsx/esm/api';
 
-const { file, userId, folderPath } = workerData;
-const prefix = folderPath ? `${folderPath}/` : '';
-const Key = `users/${userId}/${prefix}${file.originalname}`;
+register();
 
-const uploadToS3 = async () => {
-  const fileStream = fs.createReadStream(file.path);
-
-  try {
-    await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key,
-      Body: fileStream,
-      ContentType: file.mimetype,
-    }));
-    fs.unlinkSync(file.path);
-    parentPort.postMessage({ success: true, filename: file.originalname, key: Key });
-  } catch (err) {
-    parentPort.postMessage({ success: false, error: err.message });
-  }
-};
-
-uploadToS3();
+await import('./uploadWorker.ts');

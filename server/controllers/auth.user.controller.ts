@@ -2,13 +2,12 @@ import type { Request, Response } from 'express';
 import User, { IUser } from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import s3 from '../utils/s3Client.js';
 import dotenv from 'dotenv';
 import { Types } from 'mongoose';
 
 dotenv.config();
-
-const s3 = new S3Client({ region: process.env.AWS_REGION });
 
 interface SignupBody {
   username: string;
@@ -27,7 +26,7 @@ interface S3FolderData {
 }
 
 const createS3Folders = async (userId: Types.ObjectId): Promise<S3FolderData> => {
-  const bucketName = process.env.AWS_BUCKET_NAME;
+  const bucketName = process.env.S3_BUCKET;
   const baseKey = `users/${userId}/`;
 
   const folders = ['images/', 'documents/', 'videos/'];
