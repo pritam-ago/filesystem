@@ -77,3 +77,21 @@ export function getFileType(file: FileItem): string {
   const extension = file.name.split(".").pop()?.toLowerCase() || ""
   return extension
 }
+
+// A file's extension is part of its identity: downloads carry no Content-Type
+// header, so the browser and the OS decide what a file *is* from its extension
+// alone. Renaming "photo.png" to "photo" therefore turns an image into an
+// unrecognised blob, which is why renames must never let the extension go.
+//
+// Only the final segment counts, matching Explorer and Finder - "archive.tar.gz"
+// keeps ".gz" and offers "archive.tar" for editing.
+export function splitFileName(name: string, isFolder = false): { base: string; extension: string } {
+  if (isFolder) return { base: name, extension: "" }
+
+  const dot = name.lastIndexOf(".")
+  // dot === -1 is a file with no extension; dot === 0 is a dotfile such as
+  // ".gitignore", where the leading dot begins the name rather than an extension.
+  if (dot <= 0) return { base: name, extension: "" }
+
+  return { base: name.slice(0, dot), extension: name.slice(dot) }
+}

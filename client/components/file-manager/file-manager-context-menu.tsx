@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { FolderItem } from "@/lib/types"
+import { splitFileName } from "@/lib/file-utils"
 
 interface FileManagerContextMenuProps {
   position: { x: number; y: number }
@@ -37,9 +38,14 @@ export function FileManagerContextMenu({
   onDownload,
   onRename,
 }: FileManagerContextMenuProps) {
+  // Folder keys end in "/", so strip it before taking the last segment -
+  // otherwise pop() returns "" and the rename dialog opens blank.
+  const currentName = target.key.replace(/\/+$/, "").split("/").pop() || ""
+  const { base, extension } = splitFileName(currentName, target.isFolder)
+
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [newName, setNewName] = useState(target.key.split("/").pop() || "")
+  const [newName, setNewName] = useState(base)
   const [isProcessing, setIsProcessing] = useState(false)
 
   const handleRename = async () => {
@@ -47,7 +53,8 @@ export function FileManagerContextMenu({
 
     setIsProcessing(true)
     try {
-      await onRename(newName)
+      // The extension is never editable, so put the original one back.
+      await onRename(`${newName.trim()}${extension}`)
       setIsRenameDialogOpen(false)
       onClose()
     } finally {
@@ -146,22 +153,40 @@ export function FileManagerContextMenu({
           <DialogHeader>
             <DialogTitle>Rename {target.isFolder ? "folder" : "file"}</DialogTitle>
             <DialogDescription>
-              Enter a new name for this {target.isFolder ? "folder" : "file"}.
+              {extension
+                ? `Enter a new name. The ${extension} extension is kept so the file stays usable.`
+                : `Enter a new name for this ${target.isFolder ? "folder" : "file"}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleRename()
-                  }
-                }}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="name"
+                  className="flex-1"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleRename()
+                    }
+                  }}
+                />
+                {extension && (
+                  <span
+                    className="shrink-0 select-none rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground"
+                    title="The extension cannot be changed"
+                  >
+                    {extension}
+                  </span>
+                )}
+              </div>
+              {extension && (
+                <p className="text-xs text-muted-foreground">
+                  Renames to <span className="font-medium">{`${newName.trim()}${extension}`}</span>
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

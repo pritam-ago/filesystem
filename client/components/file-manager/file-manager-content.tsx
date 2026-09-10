@@ -82,6 +82,9 @@ export function FileManagerContent({
 
       {contextMenuPosition && contextMenuTarget && (
         <FileManagerContextMenu
+          // Remount when the target changes so the rename field re-seeds from
+          // the new item's name instead of keeping the previous one's.
+          key={contextMenuTarget.key}
           position={contextMenuPosition}
           target={contextMenuTarget}
           currentPath={currentPath}
