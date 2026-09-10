@@ -50,7 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json()
-        setUser(data)
+        // The API wraps the user: { user: { id, username, email } }
+        setUser(data.user)
       } catch (error) {
         console.error("Auth check failed:", error)
         localStorage.removeItem("token")
@@ -102,8 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json()
-      localStorage.setItem("token", data.token)
-      setUser(data.user)
+      // Signup does not issue a token, so there is nothing to store and no
+      // session to set. Send them to login to get one.
+      router.push("/login")
       return data
     } catch (error) {
       console.error("Signup failed:", error)
