@@ -169,8 +169,11 @@ export const renameFileOrFolder = async (req: RenameRequest, res: Response): Pro
   }
 
   try {
-    // Clean and normalize the key
-    const cleanKey = key.replace(/^\/+/, '');
+    // Clean and normalize the key. Folder keys arrive with a trailing slash
+    // (they come from ListObjectsV2 CommonPrefixes), which would otherwise
+    // make pathParts.pop() return '' and produce a '//' source prefix that
+    // matches nothing.
+    const cleanKey = key.replace(/^\/+/, '').replace(/\/+$/, '');
     
     // Split the path into parts
     const pathParts = cleanKey.split('/');
