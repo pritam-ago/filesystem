@@ -17,12 +17,15 @@ interface CorsOptions {
   credentials: boolean;
 }
 
+// Comma-separated list of allowed browser origins, e.g.
+// CORS_ORIGINS=http://localhost:5000,https://filesystem.up.railway.app
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const corsOptions: CorsOptions = {
-  origin: [
-    'http://localhost:5000',
-    'http://192.168.1.7:5000',
-    'https://filesystem.up.railway.app'
-  ],
+  origin: corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
